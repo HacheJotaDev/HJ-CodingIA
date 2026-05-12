@@ -14,13 +14,13 @@ import {
   Menu,
   Terminal,
   Sparkles,
-  RotateCcw,
   Copy,
   Check,
   Download,
-  ChevronDown,
   Paperclip,
   RefreshCw,
+  Key,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +38,11 @@ import {
   estimateTokens,
   exportToMarkdown,
 } from "@/lib/chat";
+import {
+  getApiKeyForProvider,
+  hasAnyApiKey,
+  type ApiKeys,
+} from "@/lib/api-keys";
 
 export function HJCodingIAApp() {
   // ─── State ───
@@ -45,7 +50,7 @@ export function HJCodingIAApp() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [currentModel, setCurrentModel] = useState("glm-4-plus");
+  const [currentModel, setCurrentModel] = useState("gpt-4o");
   const [speechMode, setSpeechMode] = useState("normal");
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -53,6 +58,8 @@ export function HJCodingIAApp() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState("");
   const [messageAnimations, setMessageAnimations] = useState<Set<string>>(new Set());
+  const [apiKeyWarning, setApiKeyWarning] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -68,7 +75,16 @@ export function HJCodingIAApp() {
     ? getProviderForModel(currentModel)
     : undefined;
 
-  // ─── Session management ───
+  // ─── Scroll to bottom ───
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, streamingContent, scrollToBottom]);
+
+  // ─── Auto-create first session ───
   const createNewSession = useCallback(() => {
     const id = generateId();
     const session: ChatSession = {
@@ -84,6 +100,13 @@ export function HJCodingIAApp() {
     setStreamingContent("");
   }, [currentModel]);
 
+  useEffect(() => {
+    if (sessions.length === 0) {
+      createNewSession();
+    }
+  }, [sessions.length, createNewSession]);
+
+  // ─── Session management ───
   const deleteSession = useCallback(
     (id: string) => {
       setSessions((prev) => prev.filter((s) => s.id !== id));
@@ -95,22 +118,6 @@ export function HJCodingIAApp() {
     },
     [activeSessionId, sessions, createNewSession]
   );
-
-  // ─── Scroll to bottom ───
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamingContent, scrollToBottom]);
-
-  // ─── Auto-create first session ───
-  useEffect(() => {
-    if (sessions.length === 0) {
-      createNewSession();
-    }
-  }, [sessions.length, createNewSession]);
 
   // ─── Add message to session ───
   const addMessage = useCallback(
@@ -132,7 +139,6 @@ export function HJCodingIAApp() {
             messages: [...s.messages, msg],
             updatedAt: Date.now(),
           };
-          // Auto-title from first user message
           if (
             s.title === "New Session" &&
             role === "user" &&
@@ -144,7 +150,6 @@ export function HJCodingIAApp() {
           return updated;
         })
       );
-      // Remove animation class after animation completes
       setTimeout(() => {
         setMessageAnimations((prev) => {
           const next = new Set(prev);
@@ -155,80 +160,6 @@ export function HJCodingIAApp() {
     },
     [activeSessionId]
   );
-
-  // ─── Regenerate last assistant message ───
-  const regenerateLastMessage = useCallback(async () => {
-    if (isLoading || messages.length < 2) return;
-
-    // Find the last user message
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-    if (!lastUserMsg) return;
-
-    // Remove last assistant message
-    setSessions((prev) =>
-      prev.map((s) => {
-        if (s.id !== activeSessionId) return s;
-        const msgs = [...s.messages];
-        if (msgs.length > 0 && msgs[msgs.length - 1].role === "assistant") {
-          msgs.pop();
-        }
-        return { ...s, messages: msgs, updatedAt: Date.now() };
-      })
-    );
-
-    // Re-send the last user message
-    setIsLoading(true);
-    setStreamingContent("");
-
-    const chatMessages = messages
-      .filter((m) => m.role !== "system")
-      .slice(0, -1) // Remove the last assistant message
-      .map((m) => ({ role: m.role, content: m.content }));
-
-    let systemSuffix = "";
-    if (speechMode === "caveman") {
-      systemSuffix =
-        "\n\nIMPORTANT: Respond in caveman speech mode. Strip pleasantries, articles, transitional phrases. Use dense, telegraphic output. Save tokens.";
-    } else if (speechMode === "rocky") {
-      systemSuffix =
-        '\n\nIMPORTANT: Respond in Rocky speech mode (from Project Hail Mary). Use distinctive pidgin English with expressive emphasis like "Yes! Good! Rocky know this!" etc.';
-    }
-    if (thinkingEnabled) {
-      systemSuffix +=
-        "\n\nThink step by step before answering. Show your reasoning process.";
-    }
-
-    try {
-      const res = await fetch("/api/chat?XTransformPort=3000", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: chatMessages,
-          model: currentModel,
-          systemSuffix,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `API error: ${res.status}`);
-      }
-
-      const data = await res.json();
-      const content = data.content || "No response received.";
-      addMessage("assistant", content);
-    } catch (error: unknown) {
-      const errMsg =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      addMessage(
-        "assistant",
-        `## Error\n\n\`${errMsg}\`\n\nPlease try again. If the error persists, check your connection.`
-      );
-    } finally {
-      setIsLoading(false);
-      setStreamingContent("");
-    }
-  }, [isLoading, messages, activeSessionId, speechMode, thinkingEnabled, currentModel, addMessage]);
 
   // ─── Handle slash commands ───
   const handleSlashCommand = useCallback(
@@ -367,7 +298,7 @@ export function HJCodingIAApp() {
     ]
   );
 
-  // ─── Send message ───
+  // ─── Send message with streaming ───
   const sendMessage = useCallback(
     async (e?: FormEvent) => {
       e?.preventDefault();
@@ -382,12 +313,24 @@ export function HJCodingIAApp() {
         return;
       }
 
+      // Check for API key
+      const providerId = currentProvider?.id || "z-ai";
+      const apiKey = getApiKeyForProvider(providerId);
+
+      if (!apiKey && providerId !== "z-ai") {
+        setApiKeyWarning(
+          `No API key configured for ${currentProvider?.name}. Go to Settings → API Keys to add your key.`
+        );
+        return;
+      }
+
       // Add user message
       addMessage("user", trimmed);
       setInputValue("");
       setShowCommands(false);
       setIsLoading(true);
       setStreamingContent("");
+      setApiKeyWarning(null);
 
       // Build message history for API
       const chatMessages = [
@@ -397,7 +340,7 @@ export function HJCodingIAApp() {
         { role: "user" as const, content: trimmed },
       ];
 
-      // Add speech mode instruction if active
+      // Add speech mode instruction
       let systemSuffix = "";
       if (speechMode === "caveman") {
         systemSuffix =
@@ -411,6 +354,10 @@ export function HJCodingIAApp() {
           "\n\nThink step by step before answering. Show your reasoning process.";
       }
 
+      // Create abort controller for cancellation
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       try {
         const res = await fetch("/api/chat?XTransformPort=3000", {
           method: "POST",
@@ -419,7 +366,10 @@ export function HJCodingIAApp() {
             messages: chatMessages,
             model: currentModel,
             systemSuffix,
+            apiKey: apiKey || undefined,
+            provider: providerId,
           }),
+          signal: abortController.signal,
         });
 
         if (!res.ok) {
@@ -427,19 +377,46 @@ export function HJCodingIAApp() {
           throw new Error(errData.error || `API error: ${res.status}`);
         }
 
-        const data = await res.json();
-        const content = data.content || "No response received.";
-        addMessage("assistant", content);
+        // Handle streaming response
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response stream");
+
+        const decoder = new TextDecoder();
+        let fullContent = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          fullContent += chunk;
+          setStreamingContent(fullContent);
+        }
+
+        // Add the complete message
+        if (fullContent.trim()) {
+          addMessage("assistant", fullContent);
+        } else {
+          addMessage("assistant", "No response received. Please try again.");
+        }
       } catch (error: unknown) {
-        const errMsg =
-          error instanceof Error ? error.message : "Unknown error occurred";
-        addMessage(
-          "assistant",
-          `## Error\n\n\`${errMsg}\`\n\nPlease try again. If the error persists, check your connection.`
-        );
+        if (error instanceof Error && error.name === "AbortError") {
+          // User cancelled — keep whatever we have
+          if (streamingContent.trim()) {
+            addMessage("assistant", streamingContent);
+          }
+        } else {
+          const errMsg =
+            error instanceof Error ? error.message : "Unknown error occurred";
+          addMessage(
+            "assistant",
+            `## Error\n\n\`${errMsg}\`\n\nPlease try again. If the error persists, check your API key in Settings.`
+          );
+        }
       } finally {
         setIsLoading(false);
         setStreamingContent("");
+        abortControllerRef.current = null;
       }
     },
     [
@@ -450,14 +427,44 @@ export function HJCodingIAApp() {
       speechMode,
       thinkingEnabled,
       currentModel,
+      currentProvider,
       handleSlashCommand,
+      streamingContent,
     ]
   );
+
+  // ─── Regenerate last assistant message ───
+  const regenerateLastMessage = useCallback(async () => {
+    if (isLoading || messages.length < 2) return;
+
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUserMsg) return;
+
+    // Remove last assistant message
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id !== activeSessionId) return s;
+        const msgs = [...s.messages];
+        if (msgs.length > 0 && msgs[msgs.length - 1].role === "assistant") {
+          msgs.pop();
+        }
+        return { ...s, messages: msgs, updatedAt: Date.now() };
+      })
+    );
+
+    // Re-trigger send with the last user message
+    setInputValue(lastUserMsg.content);
+    // Use setTimeout to ensure state updates before sending
+    setTimeout(() => {
+      setInputValue(lastUserMsg.content);
+    }, 0);
+  }, [isLoading, messages, activeSessionId]);
 
   // ─── Input handlers ───
   const handleInputChange = useCallback(
     (value: string) => {
       setInputValue(value);
+      setApiKeyWarning(null);
       if (value.startsWith("/")) {
         setShowCommands(true);
       } else {
@@ -493,6 +500,9 @@ export function HJCodingIAApp() {
     : [];
 
   const inputTokenCount = estimateTokens(inputValue);
+
+  // ─── Check if API key is needed ───
+  const needsApiKey = currentProvider && currentProvider.id !== "z-ai" && !getApiKeyForProvider(currentProvider.id);
 
   return (
     <div className="h-screen flex bg-[#030303] overflow-hidden">
@@ -540,24 +550,24 @@ export function HJCodingIAApp() {
             >
               {currentModelInfo?.name}
             </Badge>
-            <div className="w-2 h-2 rounded-full bg-green-500" />
+            {needsApiKey ? (
+              <div className="w-2 h-2 rounded-full bg-yellow-500" title="API key needed" />
+            ) : (
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+            )}
           </div>
         </header>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
-          {messages.length === 0 ? (
+          {messages.length === 0 && !isLoading ? (
             /* Welcome screen */
             <div className="h-full flex flex-col items-center justify-center px-6 relative">
-              {/* Animated grid background */}
               <div className="absolute inset-0 grid-bg opacity-50" />
-
-              {/* Glow orbs */}
               <div className="glow-orb w-64 h-64 bg-[#e91e63] top-1/4 left-1/3" />
               <div className="glow-orb w-48 h-48 bg-[#e91e63] bottom-1/3 right-1/4" />
 
               <div className="relative z-10 flex flex-col items-center">
-                {/* Logo with glow */}
                 <div className="relative mb-8">
                   <div className="absolute -inset-8 bg-[#e91e63]/10 rounded-full blur-3xl animate-pulse-glow" />
                   <img
@@ -574,6 +584,25 @@ export function HJCodingIAApp() {
                 <p className="text-neutral-500 text-sm text-center max-w-lg mb-10 leading-relaxed">
                   Your professional AI coding assistant. Write code, debug, refactor, plan, and ship — all in your browser.
                 </p>
+
+                {/* API key setup prompt */}
+                {!hasAnyApiKey() && (
+                  <div className="mb-6 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 max-w-md w-full">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Key className="w-4 h-4 text-yellow-400" />
+                      <span className="text-sm font-medium text-yellow-300">API Key Required</span>
+                    </div>
+                    <p className="text-xs text-yellow-200/70">
+                      Add your API key in <strong>Settings → API Keys</strong> to start chatting. Supports OpenAI, Anthropic, Google, DeepSeek, and Mistral.
+                    </p>
+                    <button
+                      onClick={() => setSidebarOpen(true)}
+                      className="mt-2 text-xs font-medium text-yellow-400 hover:text-yellow-300 underline underline-offset-2"
+                    >
+                      Open Settings →
+                    </button>
+                  </div>
+                )}
 
                 {/* Quick-start cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full">
@@ -626,9 +655,8 @@ export function HJCodingIAApp() {
                   ))}
                 </div>
 
-                {/* Powered by text */}
                 <p className="text-[10px] text-neutral-700 mt-8 tracking-wider uppercase">
-                  Powered by Z AI
+                  Powered by AI • Bring your own API key
                 </p>
               </div>
             </div>
@@ -661,10 +689,7 @@ export function HJCodingIAApp() {
                     ) : (
                       <MarkdownRenderer content={msg.content} />
                     )}
-                    {/* Action buttons */}
-                    <div
-                      className="flex items-center gap-1 mt-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
+                    <div className="flex items-center gap-1 mt-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => handleCopy(msg.id, msg.content)}
                         className="p-1 rounded hover:bg-white/[0.06] text-neutral-600 hover:text-neutral-300 transition-all"
@@ -695,7 +720,6 @@ export function HJCodingIAApp() {
                           >
                             <Download className="w-3 h-3" />
                           </button>
-                          {/* Regenerate button - only on last assistant message */}
                           {index === messages.length - 1 && (
                             <button
                               onClick={regenerateLastMessage}
@@ -712,8 +736,21 @@ export function HJCodingIAApp() {
                 </div>
               ))}
 
-              {/* Loading indicator */}
-              {isLoading && (
+              {/* Streaming content */}
+              {isLoading && streamingContent && (
+                <div className="flex gap-3 animate-fade-in">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#e91e63]/10 border border-[#e91e63]/20 flex items-center justify-center mt-1">
+                    <Sparkles className="w-4 h-4 text-[#e91e63]" />
+                  </div>
+                  <div className="max-w-[85%] rounded-xl bg-[#0a0a0a] border border-white/[0.06] px-5 py-4">
+                    <MarkdownRenderer content={streamingContent} />
+                    <span className="inline-block w-2 h-4 bg-[#e91e63] animate-typing-cursor ml-0.5 align-middle" />
+                  </div>
+                </div>
+              )}
+
+              {/* Loading indicator (when no stream yet) */}
+              {isLoading && !streamingContent && (
                 <div className="flex gap-3 animate-fade-in">
                   <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#e91e63]/10 border border-[#e91e63]/20 flex items-center justify-center">
                     <Sparkles className="w-4 h-4 text-[#e91e63] animate-pulse" />
@@ -733,6 +770,20 @@ export function HJCodingIAApp() {
             </div>
           )}
         </div>
+
+        {/* API Key warning banner */}
+        {apiKeyWarning && (
+          <div className="px-4 py-2 bg-yellow-500/10 border-t border-yellow-500/20 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+            <span className="text-xs text-yellow-300 flex-1">{apiKeyWarning}</span>
+            <button
+              onClick={() => setApiKeyWarning(null)}
+              className="text-xs text-yellow-400 hover:text-yellow-300"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Input area */}
         <div className="border-t border-white/[0.06] bg-[#080808]/80 backdrop-blur-xl px-4 py-3">
@@ -772,7 +823,6 @@ export function HJCodingIAApp() {
               className="relative flex items-end gap-2"
             >
               <div className="flex-1 relative">
-                {/* Attachment button (visual only) */}
                 <div className="absolute left-3 bottom-3 z-10">
                   <button
                     type="button"
@@ -802,7 +852,6 @@ export function HJCodingIAApp() {
                   }}
                   disabled={isLoading}
                 />
-                {/* Token counter and model info */}
                 <div className="absolute right-3 bottom-2 flex items-center gap-2">
                   <span className="text-[10px] text-neutral-700 font-mono">
                     ~{inputTokenCount} tok
@@ -827,6 +876,11 @@ export function HJCodingIAApp() {
               <div className="flex items-center gap-3">
                 <ProviderBadge modelId={currentModel} size="sm" />
                 <span>{currentModelInfo?.name}</span>
+                {needsApiKey && (
+                  <span className="text-yellow-500 flex items-center gap-1">
+                    <Key className="w-2.5 h-2.5" /> Key needed
+                  </span>
+                )}
                 {speechMode !== "normal" && (
                   <span className="text-[#e91e63]">
                     {speechMode === "caveman" ? "🦣" : "🪨"} {speechMode}
