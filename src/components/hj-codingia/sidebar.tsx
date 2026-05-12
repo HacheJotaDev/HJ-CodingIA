@@ -115,8 +115,8 @@ export function Sidebar({
     setShowKeys((prev) => ({ ...prev, [provider]: !prev[provider] }));
   }, []);
 
-  // Providers that need API keys (Z AI uses free SDK, no key needed)
-  const apiKeyProviders = PROVIDERS.filter((p) => p.id !== "z-ai");
+  // Providers that need API keys (Free and Z AI providers don't need keys)
+  const apiKeyProviders = PROVIDERS.filter((p) => !p.free);
 
   return (
     <>
@@ -256,8 +256,7 @@ export function Sidebar({
               <div className="px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full animate-pulse ${
-                    currentProvider && hasApiKeyForProvider(currentProvider.id) ? "bg-green-500" : 
-                    currentProvider?.id === "z-ai" ? "bg-green-500" : "bg-yellow-500"
+                    currentProvider?.free || (currentProvider && hasApiKeyForProvider(currentProvider.id)) ? "bg-green-500" : "bg-yellow-500"
                   }`} />
                   <span className="text-[10px] text-neutral-500 font-mono">
                     {currentModelInfo?.name || currentModel}
@@ -272,16 +271,15 @@ export function Sidebar({
               {currentProvider && (
                 <div className="px-4 pb-2 flex items-center gap-2">
                   <ProviderBadge providerId={currentProvider.id} size="sm" />
-                  {currentProvider.id === "z-ai" && (
+                  {currentProvider.free ? (
                     <span className="text-[9px] text-green-400 flex items-center gap-0.5">
                       Free
                     </span>
-                  )}
-                  {currentProvider.id !== "z-ai" && !hasApiKeyForProvider(currentProvider.id) && (
+                  ) : !hasApiKeyForProvider(currentProvider.id) ? (
                     <span className="text-[9px] text-yellow-500 flex items-center gap-0.5">
                       <Key className="w-2.5 h-2.5" /> Key needed
                     </span>
-                  )}
+                  ) : null}
                 </div>
               )}
 
@@ -326,7 +324,7 @@ export function Sidebar({
               {showApiKeys && (
                 <div className="px-4 pb-4 space-y-3 border-t border-white/[0.06] pt-3 animate-fade-in max-h-80 overflow-y-auto">
                   <p className="text-[10px] text-neutral-600 leading-relaxed">
-                    Z AI models work for free without any key. Add keys for other providers (OpenAI, Anthropic, etc.) if you want to use them. Keys are stored locally in your browser.
+                    Free models work out of the box without any key. Add keys for premium providers (OpenAI, Anthropic, etc.) if you want to use them. Keys are stored locally in your browser.
                   </p>
                   {apiKeyProviders.map((provider) => (
                     <div key={provider.id}>
@@ -404,7 +402,7 @@ export function Sidebar({
                         const models = getModelsByProvider(provider.id);
                         if (models.length === 0) return null;
                         const isExpanded = expandedProviders.includes(provider.id);
-                        const hasKey = provider.id === "z-ai" || hasApiKeyForProvider(provider.id);
+                        const hasKey = provider.free || hasApiKeyForProvider(provider.id);
 
                         return (
                           <div key={provider.id}>
@@ -423,15 +421,15 @@ export function Sidebar({
                               <span className="text-[11px] font-medium text-neutral-400">
                                 {provider.name}
                               </span>
-                              {provider.id !== "z-ai" && (
-                                <span className="ml-auto">
-                                  {hasKey ? (
-                                    <Check className="w-3 h-3 text-green-400" />
-                                  ) : (
-                                    <AlertCircle className="w-3 h-3 text-yellow-500" />
-                                  )}
-                                </span>
-                              )}
+                              <span className="ml-auto">
+                                {provider.free ? (
+                                  <span className="text-[9px] text-green-400">FREE</span>
+                                ) : hasKey ? (
+                                  <Check className="w-3 h-3 text-green-400" />
+                                ) : (
+                                  <AlertCircle className="w-3 h-3 text-yellow-500" />
+                                )}
+                              </span>
                             </button>
                             {isExpanded && (
                               <div className="ml-3 space-y-1 mt-1">

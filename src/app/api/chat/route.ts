@@ -17,25 +17,29 @@ Key behaviors:
 
 You have deep knowledge of Rust, TypeScript, Python, Go, and all major languages and frameworks.`;
 
-// ─── OpenAI-compatible chat completions (OpenAI, DeepSeek, Mistral) ───
+// ─── OpenAI-compatible streaming (works for all compatible providers) ───
 async function streamOpenAICompatible(
   endpoint: string,
-  apiKey: string,
+  apiKey: string | undefined,
   model: string,
   messages: { role: string; content: string }[],
-  systemPrompt: string
+  systemPrompt: string,
+  extraHeaders?: Record<string, string>
 ): Promise<ReadableStream<Uint8Array>> {
   const apiMessages = [
     { role: "system", content: systemPrompt },
     ...messages.map((m) => ({ role: m.role, content: m.content })),
   ];
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    ...extraHeaders,
+  };
+
   const res = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers,
     body: JSON.stringify({
       model,
       messages: apiMessages,
@@ -251,7 +255,41 @@ async function streamGoogle(
   });
 }
 
-// ─── Z AI (z-ai-web-dev-sdk) with REAL streaming ───
+// ─── Free provider: OpenCode Zen (no API key needed for free models) ───
+async function streamZenFree(
+  model: string,
+  messages: { role: string; content: string }[],
+  systemPrompt: string
+): Promise<ReadableStream<Uint8Array>> {
+  return streamOpenAICompatible(
+    "https://opencode.ai/zen/v1/chat/completions",
+    process.env.OPENCODE_API_KEY || undefined,
+    model,
+    messages,
+    systemPrompt
+  );
+}
+
+// ─── Free provider: OpenRouter free models ───
+async function streamOpenRouterFree(
+  model: string,
+  messages: { role: string; content: string }[],
+  systemPrompt: string
+): Promise<ReadableStream<Uint8Array>> {
+  return streamOpenAICompatible(
+    "https://openrouter.ai/api/v1/chat/completions",
+    process.env.OPENROUTER_API_KEY || undefined,
+    model,
+    messages,
+    systemPrompt,
+    {
+      "HTTP-Referer": "https://hj-codingia.vercel.app/",
+      "X-Title": "HJ CodingIA",
+    }
+  );
+}
+
+// ─── Z AI SDK (local dev fallback) ───
 async function streamZAI(
   model: string,
   messages: { role: string; content: string }[],
@@ -265,13 +303,12 @@ async function streamZAI(
     })),
   ];
 
-  // Try the SDK first (works locally with .z-ai-config)
   try {
     const mod = await import("z-ai-web-dev-sdk");
     const ZAI = mod.default;
     const zai = await ZAI.create();
 
-    // Use STREAMING mode - this fixes the 502 timeout on long code responses
+    // Use streaming to avoid 502 timeouts on long code responses
     const streamBody = await zai.chat.completions.create({
       messages: apiMessages,
       model: model || "glm-4-flash",
@@ -283,55 +320,33 @@ async function streamZAI(
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
 
-    // Handle different response types from the SDK
     if (streamBody && typeof streamBody === "object" && "getReader" in streamBody) {
-      // It's a ReadableStream (streaming response)
       const reader = (streamBody as ReadableStream<Uint8Array>).getReader();
       return new ReadableStream<Uint8Array>({
         async pull(controller) {
           try {
             const { done, value } = await reader.read();
-            if (done) {
-              controller.close();
-              return;
-            }
-
+            if (done) { controller.close(); return; }
             const chunk = decoder.decode(value, { stream: true });
             const lines = chunk.split("\n");
-
             for (const line of lines) {
               const trimmed = line.trim();
               if (!trimmed || !trimmed.startsWith("data: ")) continue;
-
               const data = trimmed.slice(6);
-              if (data === "[DONE]") {
-                controller.close();
-                return;
-              }
-
+              if (data === "[DONE]") { controller.close(); return; }
               try {
                 const parsed = JSON.parse(data);
-                const content =
-                  parsed.choices?.[0]?.delta?.content ||
-                  parsed.choices?.[0]?.message?.content;
-                if (content) {
-                  controller.enqueue(encoder.encode(content));
-                }
-              } catch {
-                // skip malformed JSON chunks
-              }
+                const content = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.message?.content;
+                if (content) controller.enqueue(encoder.encode(content));
+              } catch { /* skip */ }
             }
-          } catch (err) {
-            controller.error(err);
-          }
+          } catch (err) { controller.error(err); }
         },
-        cancel() {
-          reader.cancel();
-        },
+        cancel() { reader.cancel(); },
       });
     }
 
-    // Fallback: Non-streaming response (SDK returned JSON)
+    // Non-streaming fallback
     const content = streamBody?.choices?.[0]?.message?.content || "";
     return new ReadableStream<Uint8Array>({
       start(controller) {
@@ -339,38 +354,54 @@ async function streamZAI(
         controller.close();
       },
     });
-  } catch (sdkError) {
-    // SDK failed (no .z-ai-config file) — try environment variables for Vercel
-    const envApiKey = process.env.ZAI_API_KEY;
-    const envBaseUrl = process.env.ZAI_BASE_URL || "https://open.bigmodel.cn/api/paas/v4";
-
-    if (envApiKey) {
-      // Use the OpenAI-compatible endpoint with the env key
-      return streamOpenAICompatible(
-        `${envBaseUrl}/chat/completions`,
-        envApiKey,
-        model,
-        messages,
-        systemPrompt
-      );
-    }
-
-    // No SDK config and no env key — helpful error
-    const errMsg = sdkError instanceof Error ? sdkError.message : "Unknown error";
-    if (errMsg.includes("Configuration file not found")) {
-      throw new Error(
-        "Z AI is not configured for this deployment. To use Z AI models: 1) Locally: the SDK works automatically. 2) On Vercel: set ZAI_API_KEY environment variable. Or switch to another provider with your own API key in Settings."
-      );
-    }
-    throw sdkError;
+  } catch {
+    throw new Error("Z_AI_SDK_UNAVAILABLE");
   }
 }
 
-// ─── Provider model mapping ───
+// ─── Free provider with auto-fallback ───
+async function streamFree(
+  model: string,
+  messages: { role: string; content: string }[],
+  systemPrompt: string
+): Promise<ReadableStream<Uint8Array>> {
+  const errors: string[] = [];
+
+  // 1. Try Z AI SDK (works locally with .z-ai-config)
+  try {
+    return await streamZAI(model, messages, systemPrompt);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown";
+    if (msg !== "Z_AI_SDK_UNAVAILABLE") {
+      // It was a real error, not just missing config
+      errors.push(`Z AI: ${msg}`);
+    }
+  }
+
+  // 2. Try OpenCode Zen (free models, no key needed)
+  try {
+    return await streamZenFree(model, messages, systemPrompt);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown";
+    errors.push(`Zen: ${msg}`);
+  }
+
+  // 3. Try OpenRouter free
+  try {
+    return await streamOpenRouterFree(model, messages, systemPrompt);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown";
+    errors.push(`OpenRouter: ${msg}`);
+  }
+
+  // All free providers failed
+  throw new Error(
+    `All free providers failed. Errors: ${errors.join(" | ")}. You can add your own API key in Settings for a specific provider.`
+  );
+}
+
+// ─── Provider model mapping for paid providers ───
 const PROVIDER_MODEL_MAP: Record<string, string> = {
-  "glm-4-plus": "glm-4-plus",
-  "glm-4-flash": "glm-4-flash",
-  "glm-4-long": "glm-4-long",
   "claude-4-sonnet": "claude-sonnet-4-20250514",
   "claude-4-opus": "claude-opus-4-20250514",
   "gpt-4o": "gpt-4o",
@@ -387,6 +418,10 @@ const MODEL_TO_PROVIDER: Record<string, string> = {
   "glm-4-plus": "z-ai",
   "glm-4-flash": "z-ai",
   "glm-4-long": "z-ai",
+  "minimax-free": "zen",
+  "deepseek-r1-free": "zen",
+  "qwen3-free": "zen",
+  "openrouter-free": "openrouter",
   "claude-4-sonnet": "anthropic",
   "claude-4-opus": "anthropic",
   "gpt-4o": "openai",
@@ -416,12 +451,21 @@ export async function POST(req: NextRequest) {
       systemPrompt += systemSuffix;
     }
 
-    const resolvedProvider = provider || MODEL_TO_PROVIDER[model] || "z-ai";
+    const resolvedProvider = provider || MODEL_TO_PROVIDER[model] || "free";
     const apiModel = PROVIDER_MODEL_MAP[model] || model;
 
     let stream: ReadableStream<Uint8Array>;
 
     switch (resolvedProvider) {
+      // ─── Free providers (no API key needed) ───
+      case "free":
+      case "zen":
+      case "z-ai":
+      case "openrouter":
+        stream = await streamFree(model, messages, systemPrompt);
+        break;
+
+      // ─── Paid providers (require API key) ───
       case "anthropic": {
         if (!apiKey) throw new Error("Anthropic API key required. Go to Settings \u2192 API Keys to configure.");
         stream = await streamAnthropic(apiKey, apiModel, messages, systemPrompt);
@@ -431,10 +475,7 @@ export async function POST(req: NextRequest) {
         if (!apiKey) throw new Error("OpenAI API key required. Go to Settings \u2192 API Keys to configure.");
         stream = await streamOpenAICompatible(
           "https://api.openai.com/v1/chat/completions",
-          apiKey,
-          apiModel,
-          messages,
-          systemPrompt
+          apiKey, apiModel, messages, systemPrompt
         );
         break;
       }
@@ -442,10 +483,7 @@ export async function POST(req: NextRequest) {
         if (!apiKey) throw new Error("DeepSeek API key required. Go to Settings \u2192 API Keys to configure.");
         stream = await streamOpenAICompatible(
           "https://api.deepseek.com/v1/chat/completions",
-          apiKey,
-          apiModel,
-          messages,
-          systemPrompt
+          apiKey, apiModel, messages, systemPrompt
         );
         break;
       }
@@ -453,10 +491,7 @@ export async function POST(req: NextRequest) {
         if (!apiKey) throw new Error("Mistral API key required. Go to Settings \u2192 API Keys to configure.");
         stream = await streamOpenAICompatible(
           "https://api.mistral.ai/v1/chat/completions",
-          apiKey,
-          apiModel,
-          messages,
-          systemPrompt
+          apiKey, apiModel, messages, systemPrompt
         );
         break;
       }
@@ -465,24 +500,8 @@ export async function POST(req: NextRequest) {
         stream = await streamGoogle(apiKey, apiModel, messages, systemPrompt);
         break;
       }
-      case "z-ai":
-      default: {
-        // Z AI models work without user API keys using the SDK
-        if (apiKey) {
-          // If user provided a custom Z AI / OpenAI-compatible key, use it
-          stream = await streamOpenAICompatible(
-            "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-            apiKey,
-            apiModel,
-            messages,
-            systemPrompt
-          );
-        } else {
-          // Use the free Z AI SDK (works locally with .z-ai-config)
-          stream = await streamZAI(apiModel, messages, systemPrompt);
-        }
-        break;
-      }
+      default:
+        stream = await streamFree(model, messages, systemPrompt);
     }
 
     return new Response(stream, {

@@ -20,6 +20,7 @@ export interface Provider {
   color: string;
   icon: string;
   description: string;
+  free?: boolean;
 }
 
 export interface ModelInfo {
@@ -27,10 +28,12 @@ export interface ModelInfo {
   name: string;
   provider: string;
   description: string;
+  free?: boolean;
 }
 
 export const PROVIDERS: Provider[] = [
-  { id: 'z-ai', name: 'Z AI', color: '#e91e63', icon: '⚡', description: 'Z AI flagship models' },
+  { id: 'free', name: 'Free Models', color: '#00e676', icon: '🆓', description: 'Free AI models, no API key needed', free: true },
+  { id: 'z-ai', name: 'Z AI', color: '#e91e63', icon: '⚡', description: 'Z AI flagship models (local dev)', free: true },
   { id: 'anthropic', name: 'Anthropic', color: '#d4a574', icon: '🧠', description: 'Claude family models' },
   { id: 'openai', name: 'OpenAI', color: '#10a37f', icon: '🔮', description: 'GPT family models' },
   { id: 'google', name: 'Google', color: '#4285f4', icon: '✨', description: 'Gemini family models' },
@@ -39,23 +42,34 @@ export const PROVIDERS: Provider[] = [
 ] as const;
 
 export const AVAILABLE_MODELS: ModelInfo[] = [
-  // Z AI
-  { id: 'glm-4-plus', name: 'GLM-4 Plus', provider: 'z-ai', description: 'Most capable model, best for complex tasks' },
-  { id: 'glm-4-flash', name: 'GLM-4 Flash', provider: 'z-ai', description: 'Fast responses, good for quick tasks' },
-  { id: 'glm-4-long', name: 'GLM-4 Long', provider: 'z-ai', description: 'Extended context window for long documents' },
-  // Anthropic
+  // ─── Free models (no API key needed) ───
+  { id: 'minimax-free', name: 'MiniMax M2.5 Free', provider: 'free', description: 'Best free model for coding, fast & smart', free: true },
+  { id: 'deepseek-r1-free', name: 'DeepSeek R1 Free', provider: 'free', description: 'Powerful reasoning model, free tier', free: true },
+  { id: 'qwen3-free', name: 'Qwen3 Free', provider: 'free', description: 'Alibaba Qwen3, great for multilingual', free: true },
+  { id: 'openrouter-free', name: 'OpenRouter Free', provider: 'free', description: 'Auto-routes to best free model', free: true },
+
+  // ─── Z AI models (free in local dev) ───
+  { id: 'glm-4-plus', name: 'GLM-4 Plus', provider: 'z-ai', description: 'Most capable Z AI model', free: true },
+  { id: 'glm-4-flash', name: 'GLM-4 Flash', provider: 'z-ai', description: 'Fast Z AI model', free: true },
+  { id: 'glm-4-long', name: 'GLM-4 Long', provider: 'z-ai', description: 'Extended context window', free: true },
+
+  // ─── Anthropic (requires API key) ───
   { id: 'claude-4-sonnet', name: 'Claude 4 Sonnet', provider: 'anthropic', description: 'Balanced intelligence and speed' },
   { id: 'claude-4-opus', name: 'Claude 4 Opus', provider: 'anthropic', description: 'Most powerful Claude model' },
-  // OpenAI
+
+  // ─── OpenAI (requires API key) ───
   { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', description: 'Fast multimodal reasoning' },
   { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai', description: 'High performance with speed' },
-  // Google
+
+  // ─── Google (requires API key) ───
   { id: 'gemini-pro', name: 'Gemini Pro', provider: 'google', description: 'Advanced reasoning and code' },
   { id: 'gemini-flash', name: 'Gemini Flash', provider: 'google', description: 'Ultra-fast responses' },
-  // DeepSeek
+
+  // ─── DeepSeek (requires API key) ───
   { id: 'deepseek-v3', name: 'DeepSeek V3', provider: 'deepseek', description: 'Open-weight reasoning model' },
   { id: 'deepseek-coder', name: 'DeepSeek Coder', provider: 'deepseek', description: 'Specialized for code generation' },
-  // Mistral
+
+  // ─── Mistral (requires API key) ───
   { id: 'mistral-large', name: 'Mistral Large', provider: 'mistral', description: 'Top-tier Mistral model' },
   { id: 'codestral', name: 'Codestral', provider: 'mistral', description: 'Code-specialized Mistral model' },
 ] as const;
@@ -95,11 +109,20 @@ export function getModelsByProvider(providerId: string): ModelInfo[] {
   return AVAILABLE_MODELS.filter((m) => m.provider === providerId);
 }
 
-export function formatCost(tokens: number, model: string): string {
+export function isModelFree(modelId: string): boolean {
+  const model = AVAILABLE_MODELS.find((m) => m.id === modelId);
+  return !!model?.free;
+}
+
+export function formatCost(tokens: number, model: string): number {
   const rates: Record<string, [number, number]> = {
-    'glm-4-plus': [0.003, 0.015],
-    'glm-4-flash': [0.001, 0.005],
-    'glm-4-long': [0.004, 0.018],
+    'minimax-free': [0, 0],
+    'deepseek-r1-free': [0, 0],
+    'qwen3-free': [0, 0],
+    'openrouter-free': [0, 0],
+    'glm-4-plus': [0, 0],
+    'glm-4-flash': [0, 0],
+    'glm-4-long': [0, 0],
     'claude-4-sonnet': [0.003, 0.015],
     'claude-4-opus': [0.015, 0.075],
     'gpt-4o': [0.005, 0.015],
@@ -111,15 +134,15 @@ export function formatCost(tokens: number, model: string): string {
     'mistral-large': [0.004, 0.012],
     'codestral': [0.002, 0.006],
   };
-  const [inputRate] = rates[model] || rates['glm-4-plus'];
-  return `$${((tokens * inputRate) / 1000).toFixed(4)}`;
+  const [inputRate] = rates[model] || [0, 0];
+  return (tokens * inputRate) / 1000;
 }
 
 export function exportToMarkdown(messages: Message[]): string {
   const lines = ['# HJ CodingIA Session Export', ''];
   for (const msg of messages) {
     const time = new Date(msg.timestamp).toLocaleString();
-    const role = msg.role === 'user' ? '👤 You' : '🤖 HJ CodingIA';
+    const role = msg.role === 'user' ? 'You' : 'HJ CodingIA';
     lines.push(`## ${role} — ${time}`, '');
     lines.push(msg.content, '');
   }

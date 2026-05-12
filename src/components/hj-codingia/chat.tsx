@@ -41,6 +41,7 @@ import {
 import {
   getApiKeyForProvider,
 } from "@/lib/api-keys";
+import { isModelFree } from "@/lib/chat";
 
 export function HJCodingIAApp() {
   // ─── State ───
@@ -48,7 +49,7 @@ export function HJCodingIAApp() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [currentModel, setCurrentModel] = useState("glm-4-flash");
+  const [currentModel, setCurrentModel] = useState("minimax-free");
   const [speechMode, setSpeechMode] = useState("normal");
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -311,13 +312,14 @@ export function HJCodingIAApp() {
         return;
       }
 
-      // Check for API key (Z AI models work without keys)
-      const providerId = currentProvider?.id || "z-ai";
+      // Free models don't need API keys
+      const providerId = currentProvider?.id || "free";
       const apiKey = getApiKeyForProvider(providerId);
+      const modelIsFree = isModelFree(currentModel);
 
-      if (!apiKey && providerId !== "z-ai") {
+      if (!apiKey && !modelIsFree) {
         setApiKeyWarning(
-          `No API key configured for ${currentProvider?.name}. Go to Settings → API Keys to add your key.`
+          `No API key configured for ${currentProvider?.name}. Go to Settings → API Keys to add your key, or switch to a free model.`
         );
         return;
       }
@@ -364,8 +366,8 @@ export function HJCodingIAApp() {
             messages: chatMessages,
             model: currentModel,
             systemSuffix,
-            apiKey: apiKey || undefined,
-            provider: providerId,
+            apiKey: modelIsFree ? undefined : (apiKey || undefined),
+            provider: modelIsFree ? undefined : providerId,
           }),
           signal: abortController.signal,
         });
@@ -499,9 +501,8 @@ export function HJCodingIAApp() {
 
   const inputTokenCount = estimateTokens(inputValue);
 
-  // ─── Check if API key is needed ───
-  // Z AI models work without API keys, others need keys
-  const needsApiKey = currentProvider && currentProvider.id !== "z-ai" && !getApiKeyForProvider(currentProvider.id);
+  // ─── Check if API key is needed (free models don't need keys) ───
+  const needsApiKey = !isModelFree(currentModel) && currentProvider && !currentProvider.free && !getApiKeyForProvider(currentProvider.id);
 
   return (
     <div className="h-screen flex bg-[#030303] overflow-hidden">
@@ -584,24 +585,16 @@ export function HJCodingIAApp() {
                   Your professional AI coding assistant. Write code, debug, refactor, plan, and ship — all in your browser.
                 </p>
 
-                {/* API key setup prompt - only show for non-Z AI providers */}
-                {needsApiKey && (
-                  <div className="mb-6 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 max-w-md w-full">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Key className="w-4 h-4 text-yellow-400" />
-                      <span className="text-sm font-medium text-yellow-300">API Key Required</span>
-                    </div>
-                    <p className="text-xs text-yellow-200/70">
-                      Add your API key in <strong>Settings → API Keys</strong> to use {currentProvider?.name || "this provider"}. Or switch to a Z AI model which works without keys.
-                    </p>
-                    <button
-                      onClick={() => setSidebarOpen(true)}
-                      className="mt-2 text-xs font-medium text-yellow-400 hover:text-yellow-300 underline underline-offset-2"
-                    >
-                      Open Settings →
-                    </button>
+                {/* Free badge */}
+                <div className="mb-6 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 max-w-md w-full">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🆓</span>
+                    <span className="text-sm font-medium text-green-300">100% Free — No API key needed</span>
                   </div>
-                )}
+                  <p className="text-xs text-green-200/60 mt-1">
+                    Start chatting instantly. Free models work out of the box. Add your own API key in Settings for premium models.
+                  </p>
+                </div>
 
                 {/* Quick-start cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full">
@@ -655,7 +648,7 @@ export function HJCodingIAApp() {
                 </div>
 
                 <p className="text-[10px] text-neutral-700 mt-8 tracking-wider uppercase">
-                  Powered by Z AI • Free & ready to use
+                  Powered by Free AI • No API key needed
                 </p>
               </div>
             </div>
