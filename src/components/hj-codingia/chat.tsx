@@ -40,8 +40,6 @@ import {
 } from "@/lib/chat";
 import {
   getApiKeyForProvider,
-  hasAnyApiKey,
-  type ApiKeys,
 } from "@/lib/api-keys";
 
 export function HJCodingIAApp() {
@@ -50,7 +48,7 @@ export function HJCodingIAApp() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [currentModel, setCurrentModel] = useState("gpt-4o");
+  const [currentModel, setCurrentModel] = useState("glm-4-flash");
   const [speechMode, setSpeechMode] = useState("normal");
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -313,7 +311,7 @@ export function HJCodingIAApp() {
         return;
       }
 
-      // Check for API key
+      // Check for API key (Z AI models work without keys)
       const providerId = currentProvider?.id || "z-ai";
       const apiKey = getApiKeyForProvider(providerId);
 
@@ -359,7 +357,7 @@ export function HJCodingIAApp() {
       abortControllerRef.current = abortController;
 
       try {
-        const res = await fetch("/api/chat?XTransformPort=3000", {
+        const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -502,6 +500,7 @@ export function HJCodingIAApp() {
   const inputTokenCount = estimateTokens(inputValue);
 
   // ─── Check if API key is needed ───
+  // Z AI models work without API keys, others need keys
   const needsApiKey = currentProvider && currentProvider.id !== "z-ai" && !getApiKeyForProvider(currentProvider.id);
 
   return (
@@ -585,15 +584,15 @@ export function HJCodingIAApp() {
                   Your professional AI coding assistant. Write code, debug, refactor, plan, and ship — all in your browser.
                 </p>
 
-                {/* API key setup prompt */}
-                {!hasAnyApiKey() && (
+                {/* API key setup prompt - only show for non-Z AI providers */}
+                {needsApiKey && (
                   <div className="mb-6 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 max-w-md w-full">
                     <div className="flex items-center gap-2 mb-1">
                       <Key className="w-4 h-4 text-yellow-400" />
                       <span className="text-sm font-medium text-yellow-300">API Key Required</span>
                     </div>
                     <p className="text-xs text-yellow-200/70">
-                      Add your API key in <strong>Settings → API Keys</strong> to start chatting. Supports OpenAI, Anthropic, Google, DeepSeek, and Mistral.
+                      Add your API key in <strong>Settings → API Keys</strong> to use {currentProvider?.name || "this provider"}. Or switch to a Z AI model which works without keys.
                     </p>
                     <button
                       onClick={() => setSidebarOpen(true)}
@@ -656,7 +655,7 @@ export function HJCodingIAApp() {
                 </div>
 
                 <p className="text-[10px] text-neutral-700 mt-8 tracking-wider uppercase">
-                  Powered by AI • Bring your own API key
+                  Powered by Z AI • Free & ready to use
                 </p>
               </div>
             </div>

@@ -115,7 +115,7 @@ export function Sidebar({
     setShowKeys((prev) => ({ ...prev, [provider]: !prev[provider] }));
   }, []);
 
-  // Providers that need API keys (excluding z-ai which uses SDK)
+  // Providers that need API keys (Z AI uses free SDK, no key needed)
   const apiKeyProviders = PROVIDERS.filter((p) => p.id !== "z-ai");
 
   return (
@@ -272,9 +272,14 @@ export function Sidebar({
               {currentProvider && (
                 <div className="px-4 pb-2 flex items-center gap-2">
                   <ProviderBadge providerId={currentProvider.id} size="sm" />
+                  {currentProvider.id === "z-ai" && (
+                    <span className="text-[9px] text-green-400 flex items-center gap-0.5">
+                      Free
+                    </span>
+                  )}
                   {currentProvider.id !== "z-ai" && !hasApiKeyForProvider(currentProvider.id) && (
                     <span className="text-[9px] text-yellow-500 flex items-center gap-0.5">
-                      <Key className="w-2.5 h-2.5" /> No key
+                      <Key className="w-2.5 h-2.5" /> Key needed
                     </span>
                   )}
                 </div>
@@ -321,7 +326,7 @@ export function Sidebar({
               {showApiKeys && (
                 <div className="px-4 pb-4 space-y-3 border-t border-white/[0.06] pt-3 animate-fade-in max-h-80 overflow-y-auto">
                   <p className="text-[10px] text-neutral-600 leading-relaxed">
-                    Add your API keys to use different AI providers. Keys are stored locally in your browser.
+                    Z AI models work for free without any key. Add keys for other providers (OpenAI, Anthropic, etc.) if you want to use them. Keys are stored locally in your browser.
                   </p>
                   {apiKeyProviders.map((provider) => (
                     <div key={provider.id}>
