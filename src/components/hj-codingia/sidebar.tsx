@@ -115,7 +115,7 @@ export function Sidebar({
     setShowKeys((prev) => ({ ...prev, [provider]: !prev[provider] }));
   }, []);
 
-  // Providers that need API keys (Free and Z AI providers don't need keys)
+  // Providers that need API keys (Free provider doesn't need keys)
   const apiKeyProviders = PROVIDERS.filter((p) => !p.free);
 
   return (

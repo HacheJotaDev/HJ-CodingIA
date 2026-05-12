@@ -6,14 +6,13 @@ export interface ApiKeys {
   google: string;
   deepseek: string;
   mistral: string;
-  "z-ai": string;
 }
 
 const API_KEYS_STORAGE_KEY = "hj-codingia-api-keys";
 
 export function getApiKeys(): ApiKeys {
   if (typeof window === "undefined") {
-    return { anthropic: "", openai: "", google: "", deepseek: "", mistral: "", "z-ai": "" };
+    return { anthropic: "", openai: "", google: "", deepseek: "", mistral: "" };
   }
   try {
     const stored = localStorage.getItem(API_KEYS_STORAGE_KEY);
@@ -23,7 +22,7 @@ export function getApiKeys(): ApiKeys {
   } catch {
     // ignore
   }
-  return { anthropic: "", openai: "", google: "", deepseek: "", mistral: "", "z-ai": "" };
+  return { anthropic: "", openai: "", google: "", deepseek: "", mistral: "" };
 }
 
 export function saveApiKeys(keys: ApiKeys): void {

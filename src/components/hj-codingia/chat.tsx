@@ -410,7 +410,7 @@ export function HJCodingIAApp() {
             error instanceof Error ? error.message : "Unknown error occurred";
           addMessage(
             "assistant",
-            `## Error\n\n\`${errMsg}\`\n\nPlease try again. If the error persists, check your API key in Settings.`
+            `## Error\n\n\`${errMsg}\`\n\nPlease try again. If the error persists, try a different free model or add your API key in Settings.`
           );
         }
       } finally {
@@ -454,7 +454,6 @@ export function HJCodingIAApp() {
 
     // Re-trigger send with the last user message
     setInputValue(lastUserMsg.content);
-    // Use setTimeout to ensure state updates before sending
     setTimeout(() => {
       setInputValue(lastUserMsg.content);
     }, 0);
@@ -582,7 +581,7 @@ export function HJCodingIAApp() {
                   <span className="text-gradient">HJ CodingIA</span>
                 </h2>
                 <p className="text-neutral-500 text-sm text-center max-w-lg mb-10 leading-relaxed">
-                  Your professional AI coding assistant. Write code, debug, refactor, plan, and ship — all in your browser.
+                  Your professional AI coding assistant. Write code, debug, refactor, plan, and ship — all in your browser. 100% free, no API key needed.
                 </p>
 
                 {/* Free badge */}
@@ -592,7 +591,7 @@ export function HJCodingIAApp() {
                     <span className="text-sm font-medium text-green-300">100% Free — No API key needed</span>
                   </div>
                   <p className="text-xs text-green-200/60 mt-1">
-                    Start chatting instantly. Free models work out of the box. Add your own API key in Settings for premium models.
+                    Powered by OpenCode Zen free models. Start chatting instantly. Add your own API key in Settings for premium models.
                   </p>
                 </div>
 
@@ -648,7 +647,7 @@ export function HJCodingIAApp() {
                 </div>
 
                 <p className="text-[10px] text-neutral-700 mt-8 tracking-wider uppercase">
-                  Powered by Free AI • No API key needed
+                  Powered by OpenCode Zen • Free AI • No API key needed
                 </p>
               </div>
             </div>
