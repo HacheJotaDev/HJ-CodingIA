@@ -1,23 +1,37 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { address, password } = await req.json()
+    const body = await request.json();
+    const { address, password } = body;
+
     if (!address || !password) {
-      return NextResponse.json({ error: 'Faltan campos' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Dirección y contraseña son requeridas' },
+        { status: 400 }
+      );
     }
+
     const res = await fetch('https://api.mail.tm/accounts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ address, password }),
-    })
-    const data = await res.json()
+    });
+
     if (!res.ok) {
-      return NextResponse.json({ error: data.message || data.detail || 'Error al crear cuenta' }, { status: res.status })
+      const errorBody = await res.text().catch(() => '');
+      return NextResponse.json(
+        { error: `Error al crear cuenta: ${res.statusText}`, details: errorBody },
+        { status: res.status }
+      );
     }
-    return NextResponse.json(data)
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Error desconocido'
-    return NextResponse.json({ error: msg }, { status: 500 })
+
+    const data = await res.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Error de conexión con mail.tm' },
+      { status: 500 }
+    );
   }
 }

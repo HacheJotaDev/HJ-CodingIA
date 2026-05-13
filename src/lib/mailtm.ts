@@ -1,98 +1,81 @@
-import { Domain, MailAccount, MailMessage, MessagesResponse } from './types'
+import type { Domain, TokenResponse, AccountResponse, MessagesResponse, MailMessage } from './types';
 
-const BASE = 'https://api.mail.tm'
+const MAILTM_BASE = 'https://api.mail.tm';
 
-async function api(path: string, opts: RequestInit = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    ...opts,
+async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${MAILTM_BASE}${endpoint}`, {
+    ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...opts.headers,
+      ...options?.headers,
     },
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(err || `API error ${res.status}`)
-  }
-  return res.json()
-}
+  });
 
-function authHeader(token: string) {
-  return { Authorization: `Bearer ${token}` }
+  if (!res.ok) {
+    const errorBody = await res.text().catch(() => '');
+    throw new Error(`API Error ${res.status}: ${res.statusText}${errorBody ? ` - ${errorBody}` : ''}`);
+  }
+
+  return res.json();
 }
 
 export async function getDomains(): Promise<Domain[]> {
-  const data = await api('/domains')
-  return data['hydra:member'] || data
+  const data = await fetchApi<{ "hydra:member": Domain[] }>('/domains');
+  return data['hydra:member'] || [];
 }
 
-export async function createToken(address: string, password: string): Promise<{ token: string; id: string }> {
-  return api('/token', {
+export async function createToken(address: string, password: string): Promise<TokenResponse> {
+  return fetchApi<TokenResponse>('/token', {
     method: 'POST',
     body: JSON.stringify({ address, password }),
-  })
+  });
 }
 
-export async function createAccount(address: string, password: string): Promise<MailAccount> {
-  return api('/accounts', {
+export async function createAccount(address: string, password: string): Promise<AccountResponse> {
+  return fetchApi<AccountResponse>('/accounts', {
     method: 'POST',
     body: JSON.stringify({ address, password }),
-  })
+  });
 }
 
-export async function getMessages(token: string, page = 1): Promise<MessagesResponse> {
-  return api(`/messages?page=${page}`, {
-    headers: authHeader(token),
-  })
+export async function getMessages(token: string, page: number = 1): Promise<MessagesResponse> {
+  return fetchApi<MessagesResponse>(`/messages?page=${page}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
 }
 
 export async function getMessage(token: string, id: string): Promise<MailMessage> {
-  return api(`/messages/${id}`, {
-    headers: authHeader(token),
-  })
+  return fetchApi<MailMessage>(`/messages/${id}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
 }
 
 export async function deleteMessage(token: string, id: string): Promise<void> {
-  await api(`/messages/${id}`, {
+  const res = await fetch(`${MAILTM_BASE}/messages/${id}`, {
     method: 'DELETE',
-    headers: authHeader(token),
-  })
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Error al eliminar mensaje: ${res.statusText}`);
+  }
 }
 
-export async function deleteAccount(token: string, id: string): Promise<void> {
-  await api(`/accounts/${id}`, {
+export async function deleteAccount(id: string): Promise<void> {
+  const res = await fetch(`${MAILTM_BASE}/accounts/${id}`, {
     method: 'DELETE',
-    headers: authHeader(token),
-  })
-}
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
 
-export function sanitizeHtml(html: string): string {
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
-    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
-    .replace(/<embed\b[^>]*>/gi, '')
-    .replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, '')
-    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/javascript\s*:/gi, '')
-    .replace(/<meta\b[^>]*>/gi, '')
-    .replace(/<base\b[^>]*>/gi, '')
-}
-
-export function randomUsername(length = 10): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Error al eliminar cuenta: ${res.statusText}`);
   }
-  return result
-}
-
-export function randomPassword(length = 14): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$'
-  let result = ''
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return result
 }
