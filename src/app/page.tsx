@@ -1,7 +1,5 @@
-"use client";
-
-import { HJCodingIAApp } from "@/components/hj-codingia/chat";
+import { ChatApp } from "@/components/chat-app";
 
 export default function Home() {
-  return <HJCodingIAApp />;
+  return <ChatApp />;
 }

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,11 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HJ IA — Asistente de Inteligencia Artificial",
-  description: "Tu asistente de IA para todo. Pregunta lo que quieras — código, textos, análisis, curiosidades, o lo que necesites.",
-  icons: {
-    icon: "/favicon.png",
-  },
+  title: "HJ-CodingIA - Asistente de IA",
+  description: "Asistente de inteligencia artificial avanzado con chat, código y generación de imágenes",
 };
 
 export default function RootLayout({
@@ -27,12 +23,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="dark" suppressHydrationWarning>
+    <html lang="es" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
-        <Toaster />
       </body>
     </html>
   );
