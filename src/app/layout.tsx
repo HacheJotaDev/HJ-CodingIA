@@ -14,9 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HJ CodingIA — AI Coding Assistant",
-  description:
-    "Professional AI coding assistant in your browser. No installation needed — just open and code.",
+  title: "HJ IA — Asistente de Inteligencia Artificial",
+  description: "Tu asistente de IA para todo. Pregunta lo que quieras — código, textos, análisis, curiosidades, o lo que necesites.",
   icons: {
     icon: "/favicon.png",
   },
@@ -28,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="es" className="dark" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >

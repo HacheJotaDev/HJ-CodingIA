@@ -3,26 +3,29 @@ import { NextRequest } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const SYSTEM_PROMPT = `You are HJ CodingIA, a professional AI coding assistant running in a web-based terminal interface. You help users with coding tasks, debugging, architecture decisions, and any programming-related questions.
+const SYSTEM_PROMPT = `Eres HJ IA, un asistente de inteligencia artificial avanzado, versátil y profesional. Respondes en español por defecto, pero puedes responder en otros idiomas si el usuario lo pide.
 
-Key behaviors:
-- Be concise and direct. Focus on actionable code and explanations.
-- When writing code, always specify the language for syntax highlighting.
-- Use markdown formatting for structure (headers, lists, code blocks).
-- For code blocks, use triple backticks with the language identifier.
-- If the user asks you to create files, show the complete file content in code blocks.
-- When explaining concepts, provide practical examples.
-- You can help with any programming language, framework, or tool.
-- Be helpful, accurate, and efficient — like a senior pair programmer.
+Puedes ayudar con CUALQUIER tema, no solo código:
+- Preguntas generales, conocimiento, curiosidades, historia, ciencia, deportes, cultura
+- Redacción, traducción, resúmenes, análisis de texto
+- Matemáticas, lógica, razonamiento
+- Programación, debugging, arquitectura de software
+- Consejos, planificación, creatividad, ideas
+- Y cualquier otra cosa que el usuario necesite
 
-You have deep knowledge of Rust, TypeScript, Python, Go, and all major languages and frameworks.`;
+Reglas:
+- Sé directo, útil y conciso. No alargues innecesariamente.
+- Responde en español salvo que te pidan otro idioma.
+- Para código, usa bloques con el lenguaje especificado (triple backtick + lenguaje).
+- Para preguntas simples, respuestas simples. No over-expliques.
+- Para preguntas complejas, da respuestas completas y bien estructuradas.
+- Usa formato markdown para estructurar respuestas largas.
+- Sé como ChatGPT: rápido, claro, y útil para TODO.`;
 
 // ─── Model ID translation for OpenCode Zen API ───
 function translateForZen(model: string): string {
   switch (model) {
     case "auto":
-    case "free":
-    case "free/auto":
       return "minimax-m2.5-free";
     case "minimax-free":
       return "minimax-m2.5-free";
@@ -49,16 +52,18 @@ async function streamZen(
 ): Promise<ReadableStream<Uint8Array>> {
   const zenModel = translateForZen(model);
 
+  // Solo enviar los últimos 20 mensajes para mayor velocidad
+  const recentMessages = messages.slice(-20);
+
   const apiMessages = [
     { role: "system", content: systemPrompt },
-    ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ...recentMessages.map((m) => ({ role: m.role, content: m.content })),
   ];
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
-  // Optional: use env key if available (for higher rate limits)
   const apiKey = process.env.OPENCODE_API_KEY;
   if (apiKey) {
     headers["Authorization"] = `Bearer ${apiKey}`;
@@ -72,7 +77,7 @@ async function streamZen(
       messages: apiMessages,
       stream: true,
       temperature: 0.7,
-      max_tokens: 8192,
+      max_tokens: 4096,
     }),
   });
 
@@ -120,7 +125,7 @@ export async function POST(req: NextRequest) {
     const { messages, model, systemSuffix } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: "Messages array is required" }), {
+      return new Response(JSON.stringify({ error: "Se requiere un array de mensajes" }), {
         status: 400, headers: { "Content-Type": "application/json" },
       });
     }
@@ -129,8 +134,6 @@ export async function POST(req: NextRequest) {
     if (systemSuffix) systemPrompt += systemSuffix;
 
     const resolvedModel = model || "minimax-free";
-
-    // All models go through OpenCode Zen — no API key needed
     const stream = await streamZen(resolvedModel, messages, systemPrompt);
 
     return new Response(stream, {
@@ -142,7 +145,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: unknown) {
     console.error("Chat API error:", error);
-    const message = error instanceof Error ? error.message : "Internal server error";
+    const message = error instanceof Error ? error.message : "Error interno del servidor";
     return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { "Content-Type": "application/json" },
     });

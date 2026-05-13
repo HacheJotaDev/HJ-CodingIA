@@ -30,38 +30,79 @@ export interface ModelInfo {
   tag?: string;
 }
 
-// Single provider — OpenCode Zen (no API key needed)
+// Proveedor único — OpenCode Zen
 export const PROVIDERS: Provider[] = [
-  { id: 'zen', name: 'OpenCode Zen', color: '#00e676', icon: '⚡', description: 'AI models powered by OpenCode Zen — no API key required' },
+  { id: 'zen', name: 'OpenCode Zen', color: '#00e676', icon: '⚡', description: 'Modelos IA potenciados por OpenCode Zen' },
 ] as const;
 
-// 7 models — all work without API keys via OpenCode Zen
+// 7 modelos disponibles
 export const AVAILABLE_MODELS: ModelInfo[] = [
-  { id: 'minimax-free', name: 'MiniMax M2.5', provider: 'zen', description: 'Best for code — fast and accurate', tag: 'Default' },
-  { id: 'deepseek-r1-free', name: 'DeepSeek R1', provider: 'zen', description: 'Powerful reasoning and analysis', tag: 'Reasoning' },
-  { id: 'qwen3-free', name: 'Qwen3', provider: 'zen', description: 'Multilingual support', tag: 'Multilingual' },
-  { id: 'big-pickle-free', name: 'Big Pickle', provider: 'zen', description: 'Large context window', tag: 'Context' },
-  { id: 'nemotron-free', name: 'Nemotron Super', provider: 'zen', description: 'NVIDIA powered', tag: 'NVIDIA' },
-  { id: 'ring-free', name: 'Ring 2.6', provider: 'zen', description: '1T context window', tag: '1T Context' },
-  { id: 'auto', name: 'Auto Route', provider: 'zen', description: 'Automatically selects the best model', tag: 'Auto' },
+  { id: 'minimax-free', name: 'MiniMax M2.5', provider: 'zen', description: 'Rápido y preciso — ideal para todo', tag: 'Predeterminado' },
+  { id: 'deepseek-r1-free', name: 'DeepSeek R1', provider: 'zen', description: 'Razonamiento profundo y análisis', tag: 'Razonamiento' },
+  { id: 'qwen3-free', name: 'Qwen3', provider: 'zen', description: 'Soporte multilingüe', tag: 'Multilingüe' },
+  { id: 'big-pickle-free', name: 'Big Pickle', provider: 'zen', description: 'Ventana de contexto grande', tag: 'Contexto' },
+  { id: 'nemotron-free', name: 'Nemotron Super', provider: 'zen', description: 'Potenciado por NVIDIA', tag: 'NVIDIA' },
+  { id: 'ring-free', name: 'Ring 2.6', provider: 'zen', description: '1T de ventana de contexto', tag: '1T Contexto' },
+  { id: 'auto', name: 'Auto', provider: 'zen', description: 'Selecciona automáticamente el mejor modelo', tag: 'Auto' },
 ] as const;
 
 export const SLASH_COMMANDS = [
-  { name: '/help', desc: 'Show available commands', category: 'General' },
-  { name: '/clear', desc: 'Clear conversation history', category: 'General' },
-  { name: '/compact', desc: 'Summarize and compress history', category: 'General' },
-  { name: '/model', desc: 'Switch AI model', category: 'Model' },
-  { name: '/caveman', desc: 'Activate telegraphic speech mode', category: 'Display' },
-  { name: '/rocky', desc: 'Activate Rocky speech mode', category: 'Display' },
-  { name: '/normal', desc: 'Deactivate speech modes', category: 'Display' },
-  { name: '/cost', desc: 'Show token usage estimate', category: 'Info' },
-  { name: '/export', desc: 'Export conversation as markdown', category: 'Export' },
-  { name: '/think', desc: 'Toggle extended thinking', category: 'Model' },
-  { name: '/review', desc: 'Review code for issues', category: 'Code' },
-  { name: '/plan', desc: 'Enter planning mode', category: 'Code' },
-  { name: '/agents', desc: 'List available AI agents', category: 'Agents' },
-  { name: '/goals', desc: 'Set or view session goals', category: 'Agents' },
+  { name: '/ayuda', desc: 'Mostrar comandos disponibles', category: 'General' },
+  { name: '/limpiar', desc: 'Limpiar historial de conversación', category: 'General' },
+  { name: '/compactar', desc: 'Resumir y comprimir historial', category: 'General' },
+  { name: '/modelo', desc: 'Cambiar modelo de IA', category: 'Modelo' },
+  { name: '/exportar', desc: 'Exportar conversación como markdown', category: 'Exportar' },
+  { name: '/pensar', desc: 'Activar pensamiento extendido', category: 'Modelo' },
+  { name: '/revisar', desc: 'Revisar código en busca de problemas', category: 'Código' },
+  { name: '/planear', desc: 'Modo planificación', category: 'Código' },
 ] as const;
+
+// ─── Persistencia en localStorage ───
+const STORAGE_KEY = 'hj-ia-sessions';
+const ACTIVE_SESSION_KEY = 'hj-ia-active-session';
+const MODEL_KEY = 'hj-ia-model';
+
+export function saveSessionsToStorage(sessions: ChatSession[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    // Solo guardar las últimas 20 sesiones, últimas 50 msgs por sesión
+    const trimmed = sessions.slice(0, 20).map(s => ({
+      ...s,
+      messages: s.messages.slice(-50),
+    }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+  } catch { /* storage lleno, ignorar */ }
+}
+
+export function loadSessionsFromStorage(): ChatSession[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch { /* ignorar */ }
+  return [];
+}
+
+export function saveActiveSession(id: string | null): void {
+  if (typeof window === "undefined") return;
+  if (id) localStorage.setItem(ACTIVE_SESSION_KEY, id);
+  else localStorage.removeItem(ACTIVE_SESSION_KEY);
+}
+
+export function loadActiveSession(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(ACTIVE_SESSION_KEY);
+}
+
+export function saveModel(model: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(MODEL_KEY, model);
+}
+
+export function loadModel(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(MODEL_KEY);
+}
 
 export function generateId(): string {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -81,19 +122,11 @@ export function getModelsByProvider(providerId: string): ModelInfo[] {
   return AVAILABLE_MODELS.filter((m) => m.provider === providerId);
 }
 
-export function isModelFree(_modelId: string): boolean {
-  return true; // All models are free
-}
-
-export function formatCost(_tokens: number, _model: string): number {
-  return 0; // All models are free
-}
-
 export function exportToMarkdown(messages: Message[]): string {
-  const lines = ['# HJ CodingIA Session Export', ''];
+  const lines = ['# HJ IA — Exportar Sesión', ''];
   for (const msg of messages) {
-    const time = new Date(msg.timestamp).toLocaleString();
-    const role = msg.role === 'user' ? 'You' : 'HJ CodingIA';
+    const time = new Date(msg.timestamp).toLocaleString('es');
+    const role = msg.role === 'user' ? 'Tú' : 'HJ IA';
     lines.push(`## ${role} — ${time}`, '', msg.content, '');
   }
   return lines.join('\n');
