@@ -1,24 +1,21 @@
 "use client";
 
+// No API keys needed — all models work via OpenCode Zen
+// This file is kept for backward compatibility but all models are free
+
 export interface ApiKeys {
-  anthropic: string;
-  openai: string;
-  google: string;
-  deepseek: string;
-  mistral: string;
+  [key: string]: string;
 }
 
 const API_KEYS_STORAGE_KEY = "hj-codingia-api-keys";
 
 export function getApiKeys(): ApiKeys {
-  if (typeof window === "undefined") {
-    return { anthropic: "", openai: "", google: "", deepseek: "", mistral: "" };
-  }
+  if (typeof window === "undefined") return {};
   try {
     const stored = localStorage.getItem(API_KEYS_STORAGE_KEY);
     if (stored) return JSON.parse(stored);
   } catch { /* ignore */ }
-  return { anthropic: "", openai: "", google: "", deepseek: "", mistral: "" };
+  return {};
 }
 
 export function saveApiKeys(keys: ApiKeys): void {
@@ -26,16 +23,14 @@ export function saveApiKeys(keys: ApiKeys): void {
   localStorage.setItem(API_KEYS_STORAGE_KEY, JSON.stringify(keys));
 }
 
-export function getApiKeyForProvider(provider: string): string {
-  const keys = getApiKeys();
-  return keys[provider as keyof ApiKeys] || "";
+export function getApiKeyForProvider(_provider: string): string {
+  return ""; // No API keys needed
 }
 
-export function hasApiKeyForProvider(provider: string): boolean {
-  return getApiKeyForProvider(provider).trim().length > 0;
+export function hasApiKeyForProvider(_provider: string): boolean {
+  return true; // All providers work without keys
 }
 
 export function hasAnyApiKey(): boolean {
-  const keys = getApiKeys();
-  return Object.values(keys).some((v) => v.trim().length > 0);
+  return true; // Always "has" access since everything is free
 }

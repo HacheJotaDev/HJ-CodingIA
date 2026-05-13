@@ -20,7 +20,6 @@ export interface Provider {
   color: string;
   icon: string;
   description: string;
-  free?: boolean;
 }
 
 export interface ModelInfo {
@@ -28,49 +27,23 @@ export interface ModelInfo {
   name: string;
   provider: string;
   description: string;
-  free?: boolean;
+  tag?: string;
 }
 
-// Same providers as claurst — OpenCode Zen as primary free provider
+// Single provider — OpenCode Zen (no API key needed)
 export const PROVIDERS: Provider[] = [
-  { id: 'free', name: 'OpenCode Zen', color: '#00e676', icon: '🆓', description: 'Free AI models — no API key needed (like claurst)', free: true },
-  { id: 'anthropic', name: 'Anthropic', color: '#d4a574', icon: '🧠', description: 'Claude family models' },
-  { id: 'openai', name: 'OpenAI', color: '#10a37f', icon: '🔮', description: 'GPT family models' },
-  { id: 'google', name: 'Google', color: '#4285f4', icon: '✨', description: 'Gemini family models' },
-  { id: 'deepseek', name: 'DeepSeek', color: '#00d4aa', icon: '🔍', description: 'DeepSeek models' },
-  { id: 'mistral', name: 'Mistral', color: '#ff7000', icon: '🌀', description: 'Mistral family models' },
+  { id: 'zen', name: 'OpenCode Zen', color: '#00e676', icon: '⚡', description: 'AI models powered by OpenCode Zen — no API key required' },
 ] as const;
 
-// Same free models as claurst's FreeProvider
+// 7 models — all work without API keys via OpenCode Zen
 export const AVAILABLE_MODELS: ModelInfo[] = [
-  // ─── Free models via OpenCode Zen (no API key — same as claurst) ───
-  { id: 'minimax-free', name: 'MiniMax M2.5 Free', provider: 'free', description: 'Best free coding model — fast & smart', free: true },
-  { id: 'deepseek-r1-free', name: 'DeepSeek R1 Free', provider: 'free', description: 'Powerful reasoning, free tier', free: true },
-  { id: 'qwen3-free', name: 'Qwen3 Free', provider: 'free', description: 'Great for multilingual code', free: true },
-  { id: 'big-pickle-free', name: 'Big Pickle Free', provider: 'free', description: 'Large context free model', free: true },
-  { id: 'nemotron-free', name: 'Nemotron Super Free', provider: 'free', description: 'NVIDIA free tier model', free: true },
-  { id: 'ring-free', name: 'Ring 2.6 Free', provider: 'free', description: '1T context window free', free: true },
-  { id: 'openrouter-free', name: 'OpenRouter Free', provider: 'free', description: 'Auto-routes to best free model', free: true },
-
-  // ─── Anthropic (requires API key) ───
-  { id: 'claude-4-sonnet', name: 'Claude 4 Sonnet', provider: 'anthropic', description: 'Balanced intelligence and speed' },
-  { id: 'claude-4-opus', name: 'Claude 4 Opus', provider: 'anthropic', description: 'Most powerful Claude model' },
-
-  // ─── OpenAI (requires API key) ───
-  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', description: 'Fast multimodal reasoning' },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai', description: 'High performance with speed' },
-
-  // ─── Google (requires API key) ───
-  { id: 'gemini-pro', name: 'Gemini Pro', provider: 'google', description: 'Advanced reasoning and code' },
-  { id: 'gemini-flash', name: 'Gemini Flash', provider: 'google', description: 'Ultra-fast responses' },
-
-  // ─── DeepSeek (requires API key) ───
-  { id: 'deepseek-v3', name: 'DeepSeek V3', provider: 'deepseek', description: 'Open-weight reasoning model' },
-  { id: 'deepseek-coder', name: 'DeepSeek Coder', provider: 'deepseek', description: 'Specialized for code generation' },
-
-  // ─── Mistral (requires API key) ───
-  { id: 'mistral-large', name: 'Mistral Large', provider: 'mistral', description: 'Top-tier Mistral model' },
-  { id: 'codestral', name: 'Codestral', provider: 'mistral', description: 'Code-specialized Mistral model' },
+  { id: 'minimax-free', name: 'MiniMax M2.5', provider: 'zen', description: 'Best for code — fast and accurate', tag: 'Default' },
+  { id: 'deepseek-r1-free', name: 'DeepSeek R1', provider: 'zen', description: 'Powerful reasoning and analysis', tag: 'Reasoning' },
+  { id: 'qwen3-free', name: 'Qwen3', provider: 'zen', description: 'Multilingual support', tag: 'Multilingual' },
+  { id: 'big-pickle-free', name: 'Big Pickle', provider: 'zen', description: 'Large context window', tag: 'Context' },
+  { id: 'nemotron-free', name: 'Nemotron Super', provider: 'zen', description: 'NVIDIA powered', tag: 'NVIDIA' },
+  { id: 'ring-free', name: 'Ring 2.6', provider: 'zen', description: '1T context window', tag: '1T Context' },
+  { id: 'auto', name: 'Auto Route', provider: 'zen', description: 'Automatically selects the best model', tag: 'Auto' },
 ] as const;
 
 export const SLASH_COMMANDS = [
@@ -108,23 +81,12 @@ export function getModelsByProvider(providerId: string): ModelInfo[] {
   return AVAILABLE_MODELS.filter((m) => m.provider === providerId);
 }
 
-export function isModelFree(modelId: string): boolean {
-  const model = AVAILABLE_MODELS.find((m) => m.id === modelId);
-  return !!model?.free;
+export function isModelFree(_modelId: string): boolean {
+  return true; // All models are free
 }
 
-export function formatCost(tokens: number, model: string): number {
-  const rates: Record<string, [number, number]> = {
-    'minimax-free': [0, 0], 'deepseek-r1-free': [0, 0], 'qwen3-free': [0, 0],
-    'big-pickle-free': [0, 0], 'nemotron-free': [0, 0], 'ring-free': [0, 0], 'openrouter-free': [0, 0],
-    'claude-4-sonnet': [0.003, 0.015], 'claude-4-opus': [0.015, 0.075],
-    'gpt-4o': [0.005, 0.015], 'gpt-4-turbo': [0.01, 0.03],
-    'gemini-pro': [0.003, 0.015], 'gemini-flash': [0.001, 0.005],
-    'deepseek-v3': [0.002, 0.008], 'deepseek-coder': [0.002, 0.008],
-    'mistral-large': [0.004, 0.012], 'codestral': [0.002, 0.006],
-  };
-  const [inputRate] = rates[model] || [0, 0];
-  return (tokens * inputRate) / 1000;
+export function formatCost(_tokens: number, _model: string): number {
+  return 0; // All models are free
 }
 
 export function exportToMarkdown(messages: Message[]): string {

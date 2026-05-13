@@ -10,7 +10,7 @@ import {
 } from "react";
 import {
   Send, Loader2, Menu, Terminal, Sparkles, Copy, Check,
-  Download, Paperclip, RefreshCw, Key, AlertTriangle,
+  Download, Paperclip, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,9 +19,8 @@ import { Sidebar } from "./sidebar";
 import { ProviderBadge } from "./provider-badge";
 import {
   type Message, type ChatSession, SLASH_COMMANDS, AVAILABLE_MODELS,
-  PROVIDERS, getProviderForModel, generateId, estimateTokens, exportToMarkdown, isModelFree,
+  PROVIDERS, getProviderForModel, generateId, estimateTokens, exportToMarkdown,
 } from "@/lib/chat";
-import { getApiKeyForProvider } from "@/lib/api-keys";
 
 export function HJCodingIAApp() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -36,7 +35,6 @@ export function HJCodingIAApp() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState("");
   const [messageAnimations, setMessageAnimations] = useState<Set<string>>(new Set());
-  const [apiKeyWarning, setApiKeyWarning] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -111,18 +109,15 @@ export function HJCodingIAApp() {
           setCurrentModel(modelName);
           addMessage("assistant", `Model switched to **${AVAILABLE_MODELS.find((m) => m.id === modelName)?.name}**.`);
         } else {
-          addMessage("assistant", `## Available Models\n\n${PROVIDERS.map((p) => {
-            const models = AVAILABLE_MODELS.filter((m) => m.provider === p.id);
-            return `### ${p.icon} ${p.name}\n${models.map((m) => `- **${m.name}** (\`${m.id}\`) — ${m.description}`).join("\n")}`;
-          }).join("\n\n")}\n\nUse \`/model <id>\` to switch.`);
+          addMessage("assistant", `## Available Models\n\n${AVAILABLE_MODELS.map((m) => `- **${m.name}** (\`${m.id}\`) — ${m.description}${m.tag ? ` [${m.tag}]` : ''}`).join("\n")}\n\nUse \`/model <id>\` to switch.`);
         }
         break;
       }
-      case "/caveman": setSpeechMode("caveman"); addMessage("assistant", "🦣 Caveman mode ON. Responses compressed."); break;
-      case "/rocky": setSpeechMode("rocky"); addMessage("assistant", "🪨 Rocky mode ON. Alien grammar activated."); break;
-      case "/normal": setSpeechMode("normal"); addMessage("assistant", "💬 Normal mode. Standard responses restored."); break;
+      case "/caveman": setSpeechMode("caveman"); addMessage("assistant", "Caveman mode ON. Responses compressed."); break;
+      case "/rocky": setSpeechMode("rocky"); addMessage("assistant", "Rocky mode ON. Alien grammar activated."); break;
+      case "/normal": setSpeechMode("normal"); addMessage("assistant", "Normal mode. Standard responses restored."); break;
       case "/cost":
-        addMessage("assistant", `## Session Cost Estimate\n\n- **Tokens used:** ~${totalTokens.toLocaleString()}\n- **Messages:** ${messages.length}\n- **Model:** ${currentModelInfo?.name || currentModel}\n- **Provider:** ${currentProvider?.name || "Unknown"}\n- **Speech mode:** ${speechMode}`);
+        addMessage("assistant", `## Session Stats\n\n- **Tokens used:** ~${totalTokens.toLocaleString()}\n- **Messages:** ${messages.length}\n- **Model:** ${currentModelInfo?.name || currentModel}\n- **Provider:** ${currentProvider?.name || "OpenCode Zen"}\n- **Speech mode:** ${speechMode}`);
         break;
       case "/export": {
         const md = exportToMarkdown(messages);
@@ -130,24 +125,24 @@ export function HJCodingIAApp() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a"); a.href = url; a.download = `hj-codingia-session-${Date.now()}.md`; a.click();
         URL.revokeObjectURL(url);
-        addMessage("assistant", "📥 Session exported as Markdown file.");
+        addMessage("assistant", "Session exported as Markdown file.");
         break;
       }
       case "/think":
         setThinkingEnabled((prev) => !prev);
-        addMessage("assistant", `🧠 Extended thinking ${thinkingEnabled ? "disabled" : "enabled"}.`);
+        addMessage("assistant", `Extended thinking ${thinkingEnabled ? "disabled" : "enabled"}.`);
         break;
       case "/review":
-        addMessage("assistant", "🔍 Review mode activated. Paste your code and I'll perform a thorough code review covering security, performance, maintainability, and best practices.");
+        addMessage("assistant", "Review mode activated. Paste your code and I'll perform a thorough code review covering security, performance, maintainability, and best practices.");
         break;
       case "/plan":
-        addMessage("assistant", "📋 Planning mode activated. Describe what you want to build and I'll create a detailed implementation plan before writing any code.");
+        addMessage("assistant", "Planning mode activated. Describe what you want to build and I'll create a detailed implementation plan before writing any code.");
         break;
       case "/agents":
         addMessage("assistant", `## Available AI Agents\n\n${["- **Code Writer** — Generates and refactors code", "- **Debugger** — Diagnoses and fixes issues", "- **Architect** — Designs system architecture", "- **Reviewer** — Performs code reviews", "- **Planner** — Creates implementation plans", "- **Tester** — Generates test suites"].join("\n")}\n\nUse \`/plan\` or \`/review\` to activate specific agent modes.`);
         break;
       case "/goals":
-        addMessage("assistant", "🎯 Goal tracking is available for this session. Describe what you want to accomplish and I'll help you track progress against your objectives.");
+        addMessage("assistant", "Goal tracking is available for this session. Describe what you want to accomplish and I'll help you track progress against your objectives.");
         break;
       default:
         addMessage("assistant", `Unknown command: **${command}**. Type \`/help\` to see available commands.`);
@@ -161,17 +156,8 @@ export function HJCodingIAApp() {
 
     if (trimmed.startsWith("/")) { handleSlashCommand(trimmed); setInputValue(""); setShowCommands(false); return; }
 
-    const providerId = currentProvider?.id || "free";
-    const apiKey = getApiKeyForProvider(providerId);
-    const modelIsFree = isModelFree(currentModel);
-
-    if (!apiKey && !modelIsFree) {
-      setApiKeyWarning(`No API key for ${currentProvider?.name}. Switch to a free model or add your key in Settings.`);
-      return;
-    }
-
     addMessage("user", trimmed);
-    setInputValue(""); setShowCommands(false); setIsLoading(true); setStreamingContent(""); setApiKeyWarning(null);
+    setInputValue(""); setShowCommands(false); setIsLoading(true); setStreamingContent("");
 
     const chatMessages = [
       ...messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role, content: m.content })),
@@ -191,16 +177,16 @@ export function HJCodingIAApp() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: chatMessages, model: currentModel, systemSuffix,
-          apiKey: modelIsFree ? undefined : (apiKey || undefined),
-          provider: modelIsFree ? undefined : providerId,
+          messages: chatMessages,
+          model: currentModel,
+          systemSuffix,
         }),
         signal: abortController.signal,
       });
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `API error: ${res.status}`);
+        throw new Error(errData.error || `Server error: ${res.status}`);
       }
 
       const reader = res.body?.getReader();
@@ -224,12 +210,12 @@ export function HJCodingIAApp() {
         if (streamingContent.trim()) addMessage("assistant", streamingContent);
       } else {
         const errMsg = error instanceof Error ? error.message : "Unknown error occurred";
-        addMessage("assistant", `## Error\n\n\`${errMsg}\`\n\nPlease try again. Free models work without API keys.`);
+        addMessage("assistant", `## Error\n\n\`${errMsg}\`\n\nPlease try again or switch to a different model.`);
       }
     } finally {
       setIsLoading(false); setStreamingContent(""); abortControllerRef.current = null;
     }
-  }, [inputValue, isLoading, addMessage, messages, speechMode, thinkingEnabled, currentModel, currentProvider, handleSlashCommand, streamingContent]);
+  }, [inputValue, isLoading, addMessage, messages, speechMode, thinkingEnabled, currentModel, handleSlashCommand, streamingContent]);
 
   const regenerateLastMessage = useCallback(async () => {
     if (isLoading || messages.length < 2) return;
@@ -246,7 +232,7 @@ export function HJCodingIAApp() {
   }, [isLoading, messages, activeSessionId]);
 
   const handleInputChange = useCallback((value: string) => {
-    setInputValue(value); setApiKeyWarning(null); setShowCommands(value.startsWith("/"));
+    setInputValue(value); setShowCommands(value.startsWith("/"));
   }, []);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -259,7 +245,6 @@ export function HJCodingIAApp() {
 
   const filteredCommands = showCommands ? SLASH_COMMANDS.filter((c) => c.name.toLowerCase().startsWith(inputValue.toLowerCase())) : [];
   const inputTokenCount = estimateTokens(inputValue);
-  const needsApiKey = !isModelFree(currentModel) && currentProvider && !currentProvider.free && !getApiKeyForProvider(currentProvider.id);
 
   return (
     <div className="h-screen flex bg-[#030303] overflow-hidden">
@@ -277,7 +262,10 @@ export function HJCodingIAApp() {
           <div className="flex items-center gap-2">
             <ProviderBadge modelId={currentModel} size="sm" />
             <Badge variant="outline" className="text-[10px] border-white/[0.08] text-neutral-500 bg-white/[0.02]">{currentModelInfo?.name}</Badge>
-            {needsApiKey ? <div className="w-2 h-2 rounded-full bg-yellow-500" /> : <div className="w-2 h-2 rounded-full bg-green-500" />}
+            {currentModelInfo?.tag && (
+              <Badge variant="outline" className="text-[9px] border-[#e91e63]/20 text-[#e91e63]/80 bg-[#e91e63]/5">{currentModelInfo.tag}</Badge>
+            )}
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           </div>
         </header>
 
@@ -293,14 +281,7 @@ export function HJCodingIAApp() {
                   <img src="/hj-codingia-logo.png" alt="HJ CodingIA" className="relative w-24 h-24 animate-float drop-shadow-[0_0_30px_rgba(233,30,99,0.3)]" />
                 </div>
                 <h2 className="text-3xl font-bold mb-3">Welcome to <span className="text-gradient">HJ CodingIA</span></h2>
-                <p className="text-neutral-500 text-sm text-center max-w-lg mb-10 leading-relaxed">Your professional AI coding assistant. Write code, debug, refactor, plan, and ship — all in your browser. No API key needed.</p>
-                <div className="mb-6 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 max-w-md w-full">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">🆓</span>
-                    <span className="text-sm font-medium text-green-300">100% Free — No API key needed</span>
-                  </div>
-                  <p className="text-xs text-green-200/60 mt-1">Powered by OpenCode Zen free models. Works like claurst — no keys, no config. Just chat and code.</p>
-                </div>
+                <p className="text-neutral-500 text-sm text-center max-w-lg mb-10 leading-relaxed">Your professional AI coding assistant. Write code, debug, refactor, plan, and ship — all in your browser.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full">
                   {[
                     { icon: "💻", title: "Build an App", desc: "Describe a web app you want to build", prompt: "Help me build a modern web application with user authentication and a dashboard" },
@@ -317,7 +298,7 @@ export function HJCodingIAApp() {
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-neutral-700 mt-8 tracking-wider uppercase">Powered by OpenCode Zen • Free AI • No API key needed</p>
+                <p className="text-[10px] text-neutral-700 mt-8 tracking-wider uppercase">Powered by OpenCode Zen</p>
               </div>
             </div>
           ) : (
@@ -367,14 +348,6 @@ export function HJCodingIAApp() {
           )}
         </div>
 
-        {apiKeyWarning && (
-          <div className="px-4 py-2 bg-yellow-500/10 border-t border-yellow-500/20 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-            <span className="text-xs text-yellow-300 flex-1">{apiKeyWarning}</span>
-            <button onClick={() => setApiKeyWarning(null)} className="text-xs text-yellow-400 hover:text-yellow-300">✕</button>
-          </div>
-        )}
-
         <div className="border-t border-white/[0.06] bg-[#080808]/80 backdrop-blur-xl px-4 py-3">
           <div className="max-w-4xl mx-auto">
             {showCommands && filteredCommands.length > 0 && (
@@ -406,7 +379,6 @@ export function HJCodingIAApp() {
               <div className="flex items-center gap-3">
                 <ProviderBadge modelId={currentModel} size="sm" />
                 <span>{currentModelInfo?.name}</span>
-                {needsApiKey && <span className="text-yellow-500 flex items-center gap-1"><Key className="w-2.5 h-2.5" /> Key needed</span>}
                 {speechMode !== "normal" && <span className="text-[#e91e63]">{speechMode === "caveman" ? "🦣" : "🪨"} {speechMode}</span>}
               </div>
               <div className="flex items-center gap-3">
