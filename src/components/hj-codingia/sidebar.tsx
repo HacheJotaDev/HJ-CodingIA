@@ -1,27 +1,28 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import {
   MessageSquare, Plus, Trash2, Settings, ChevronLeft, X, Zap,
   Brain, Clock, Search, ChevronDown, ChevronRight, Bot,
+  MessageCircle, Code2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AVAILABLE_MODELS, PROVIDERS, getModelsByProvider, type ChatSession } from "@/lib/chat";
+import { AVAILABLE_MODELS, PROVIDERS, getModelsByProvider, type ChatSession, type AIMode, getModelsForMode } from "@/lib/chat";
 
 interface SidebarProps {
   sessions: ChatSession[]; activeSessionId: string | null; currentModel: string;
-  totalTokens: number; thinkingEnabled: boolean;
+  totalTokens: number; thinkingEnabled: boolean; aiMode: AIMode;
   onSelectSession: (id: string) => void; onNewSession: () => void;
   onDeleteSession: (id: string) => void; onModelChange: (model: string) => void;
-  onThinkingToggle: () => void;
+  onThinkingToggle: () => void; onModeChange: (mode: AIMode) => void;
   isOpen: boolean; onToggle: () => void;
 }
 
 export function Sidebar({
   sessions, activeSessionId, currentModel, totalTokens,
-  thinkingEnabled, onSelectSession, onNewSession,
-  onDeleteSession, onModelChange, onThinkingToggle,
+  thinkingEnabled, aiMode, onSelectSession, onNewSession,
+  onDeleteSession, onModelChange, onThinkingToggle, onModeChange,
   isOpen, onToggle,
 }: SidebarProps) {
   const [showSettings, setShowSettings] = useState(false);
@@ -29,6 +30,7 @@ export function Sidebar({
   const [expandedProviders, setExpandedProviders] = useState<string[]>(PROVIDERS.map((p) => p.id));
 
   const currentModelInfo = AVAILABLE_MODELS.find((m) => m.id === currentModel);
+  const modeModels = getModelsForMode(aiMode);
 
   const filteredSessions = useMemo(() => {
     if (!sessionSearch.trim()) return sessions;
@@ -39,6 +41,9 @@ export function Sidebar({
     setExpandedProviders((prev) => prev.includes(providerId) ? prev.filter((id) => id !== providerId) : [...prev, providerId]);
   };
 
+  const ModeIcon = aiMode === 'chat' ? MessageCircle : Code2;
+  const modeLabel = aiMode === 'chat' ? 'Chat' : 'Código';
+
   return (
     <>
       {isOpen && <div className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm" onClick={onToggle} />}
@@ -46,7 +51,7 @@ export function Sidebar({
         {!isOpen ? (
           <div className="flex flex-col items-center py-4 gap-3">
             <button onClick={onToggle} className="p-2 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all"><ChevronLeft className="w-4 h-4 rotate-180" /></button>
-            <button onClick={onToggle} className="p-2 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all"><Bot className="w-4 h-4" /></button>
+            <button onClick={onToggle} className="p-2 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all"><ModeIcon className="w-4 h-4" /></button>
           </div>
         ) : (
           <>
@@ -61,7 +66,19 @@ export function Sidebar({
               </div>
             </div>
 
-            <div className="px-3 py-3">
+            {/* Mode Switcher */}
+            <div className="px-3 pt-3 pb-1">
+              <div className="flex items-center bg-white/[0.04] rounded-lg border border-white/[0.06] p-0.5">
+                <button onClick={() => onModeChange('chat')} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-all ${aiMode === 'chat' ? 'bg-[#e91e63]/15 text-[#e91e63] border border-[#e91e63]/20' : 'text-neutral-500 hover:text-neutral-300 border border-transparent'}`}>
+                  <MessageCircle className="w-3 h-3" /> Chat
+                </button>
+                <button onClick={() => onModeChange('code')} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-all ${aiMode === 'code' ? 'bg-[#e91e63]/15 text-[#e91e63] border border-[#e91e63]/20' : 'text-neutral-500 hover:text-neutral-300 border border-transparent'}`}>
+                  <Code2 className="w-3 h-3" /> Código
+                </button>
+              </div>
+            </div>
+
+            <div className="px-3 py-2">
               <Button onClick={onNewSession} className="w-full bg-[#e91e63]/10 hover:bg-[#e91e63]/20 border border-[#e91e63]/20 text-[#e91e63] hover:text-[#ff2a76] justify-start gap-2 text-sm font-medium">
                 <Plus className="w-4 h-4" /> Nuevo chat
               </Button>
@@ -92,7 +109,7 @@ export function Sidebar({
                   <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
                   <span className="text-[10px] text-neutral-500 font-mono">{currentModelInfo?.name || currentModel}</span>
                 </div>
-                <span className="text-[10px] text-neutral-600 font-mono">~{totalTokens.toLocaleString()} tok</span>
+                <span className="text-[10px] text-neutral-600 font-mono">~{totalTokens.toLocaleString()}</span>
               </div>
 
               {thinkingEnabled && (
@@ -109,37 +126,19 @@ export function Sidebar({
                 <div className="px-4 pb-4 space-y-4 border-t border-white/[0.06] pt-3 animate-fade-in max-h-96 overflow-y-auto">
                   <div>
                     <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-widest mb-2 block">Modelo</label>
-                    <div className="space-y-1">
-                      {PROVIDERS.map((provider) => {
-                        const models = getModelsByProvider(provider.id);
-                        if (models.length === 0) return null;
-                        const isExpanded = expandedProviders.includes(provider.id);
-                        return (
-                          <div key={provider.id}>
-                            <button onClick={() => toggleProvider(provider.id)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/[0.03] transition-colors text-left">
-                              {isExpanded ? <ChevronDown className="w-3 h-3 text-neutral-600" /> : <ChevronRight className="w-3 h-3 text-neutral-600" />}
-                              <span className="text-[10px]" style={{ color: provider.color }}>{provider.icon}</span>
-                              <span className="text-[11px] font-medium text-neutral-400">{provider.name}</span>
-                            </button>
-                            {isExpanded && (
-                              <div className="ml-3 space-y-0.5 mt-1">
-                                {models.map((m) => (
-                                  <button key={m.id} onClick={() => onModelChange(m.id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all ${currentModel === m.id ? "bg-[#e91e63]/10 border border-[#e91e63]/20" : "hover:bg-white/[0.04] border border-transparent"}`}>
-                                    <Zap className={`w-3 h-3 ${currentModel === m.id ? "text-[#e91e63]" : "text-neutral-600"}`} />
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className={`text-xs font-medium ${currentModel === m.id ? "text-white" : "text-neutral-300"}`}>{m.name}</span>
-                                        {m.tag && <span className="text-[8px] text-neutral-600 bg-white/[0.04] px-1.5 py-0.5 rounded">{m.tag}</span>}
-                                      </div>
-                                      <div className="text-[10px] text-neutral-600">{m.description}</div>
-                                    </div>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
+                    <div className="space-y-0.5">
+                      {modeModels.map((m) => (
+                        <button key={m.id} onClick={() => onModelChange(m.id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all ${currentModel === m.id ? "bg-[#e91e63]/10 border border-[#e91e63]/20" : "hover:bg-white/[0.04] border border-transparent"}`}>
+                          <Zap className={`w-3 h-3 ${currentModel === m.id ? "text-[#e91e63]" : "text-neutral-600"}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-xs font-medium ${currentModel === m.id ? "text-white" : "text-neutral-300"}`}>{m.name}</span>
+                              {m.tag && <span className="text-[8px] text-neutral-600 bg-white/[0.04] px-1.5 py-0.5 rounded">{m.tag}</span>}
+                            </div>
+                            <div className="text-[10px] text-neutral-600">{m.description}</div>
                           </div>
-                        );
-                      })}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
@@ -149,7 +148,7 @@ export function Sidebar({
                     </button>
                   </div>
                   <div className="flex items-center justify-between text-[10px] text-neutral-600">
-                    <div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span>~{totalTokens.toLocaleString()} tokens en esta sesión</span></div>
+                    <div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span>~{totalTokens.toLocaleString()} tokens</span></div>
                   </div>
                 </div>
               )}

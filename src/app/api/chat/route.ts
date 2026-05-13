@@ -3,26 +3,43 @@ import { NextRequest } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const SYSTEM_PROMPT = `Eres HJ IA, un asistente de inteligencia artificial avanzado, versátil y profesional. Respondes en español por defecto, pero puedes responder en otros idiomas si el usuario lo pide.
+// ─── System prompts (imported from chat.ts logic) ───
+const CHAT_PROMPT = `Eres HJ IA, un asistente de inteligencia artificial amigable y versátil. Respondes en español por defecto.
 
-Puedes ayudar con CUALQUIER tema, no solo código:
-- Preguntas generales, conocimiento, curiosidades, historia, ciencia, deportes, cultura
+Puedes ayudar con CUALQUIER tema:
+- Preguntas generales, curiosidades, historia, ciencia, deportes, cultura
 - Redacción, traducción, resúmenes, análisis de texto
 - Matemáticas, lógica, razonamiento
-- Programación, debugging, arquitectura de software
-- Consejos, planificación, creatividad, ideas
-- Y cualquier otra cosa que el usuario necesite
+- Conversación casual, consejos, creatividad
+- Y cualquier cosa que el usuario necesite
 
 Reglas:
-- Sé directo, útil y conciso. No alargues innecesariamente.
+- Sé directo, amigable y conciso. No alargues innecesariamente.
 - Responde en español salvo que te pidan otro idioma.
-- Para código, usa bloques con el lenguaje especificado (triple backtick + lenguaje).
-- Para preguntas simples, respuestas simples. No over-expliques.
-- Para preguntas complejas, da respuestas completas y bien estructuradas.
-- Usa formato markdown para estructurar respuestas largas.
-- Sé como ChatGPT: rápido, claro, y útil para TODO.`;
+- Para preguntas simples, respuestas simples y rápidas.
+- Para preguntas complejas, respuestas completas y bien estructuradas.
+- Usa formato markdown cuando ayude a la claridad.
+- Sé como ChatGPT: rápido, claro, útil y natural.`;
+
+const CODE_PROMPT = `Eres HJ IA Code, un asistente de programación profesional y experto. Respondes en español por defecto.
+
+Especializado en:
+- Escribir, depurar y refactorizar código en cualquier lenguaje
+- Arquitectura de software, diseño de sistemas
+- Revisión de código, seguridad, rendimiento
+- Explicar conceptos técnicos con ejemplos prácticos
+- Crear proyectos completos paso a paso
+
+Reglas:
+- Sé directo y enfocado en código actionable.
+- Responde en español salvo que te pidan otro idioma.
+- Para código, usa bloques con el lenguaje (triple backtick + lenguaje).
+- Si el usuario pide crear algo, muestra el código completo y funcional.
+- Explica brevemente el "por qué" detrás de las decisiones técnicas.
+- Sé como un senior developer pair programming.`;
 
 // ─── Model ID translation for OpenCode Zen API ───
+// Based on https://opencode.ai/docs — Zen provider model IDs
 function translateForZen(model: string): string {
   switch (model) {
     case "auto":
@@ -45,6 +62,8 @@ function translateForZen(model: string): string {
 }
 
 // ─── OpenAI-compatible streaming via OpenCode Zen ───
+// Endpoint: https://opencode.ai/zen/v1/chat/completions
+// Free models work without API key
 async function streamZen(
   model: string,
   messages: { role: string; content: string }[],
@@ -52,8 +71,8 @@ async function streamZen(
 ): Promise<ReadableStream<Uint8Array>> {
   const zenModel = translateForZen(model);
 
-  // Solo enviar los últimos 20 mensajes para mayor velocidad
-  const recentMessages = messages.slice(-20);
+  // Solo últimos 16 mensajes para velocidad
+  const recentMessages = messages.slice(-16);
 
   const apiMessages = [
     { role: "system", content: systemPrompt },
@@ -64,6 +83,7 @@ async function streamZen(
     "Content-Type": "application/json",
   };
 
+  // API key opcional (para rate limits más altos)
   const apiKey = process.env.OPENCODE_API_KEY;
   if (apiKey) {
     headers["Authorization"] = `Bearer ${apiKey}`;
@@ -122,7 +142,7 @@ async function streamZen(
 // ─── Main POST handler ───
 export async function POST(req: NextRequest) {
   try {
-    const { messages, model, systemSuffix } = await req.json();
+    const { messages, model, systemSuffix, mode } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "Se requiere un array de mensajes" }), {
@@ -130,11 +150,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    let systemPrompt = SYSTEM_PROMPT;
-    if (systemSuffix) systemPrompt += systemSuffix;
+    // Seleccionar system prompt según modo
+    const systemPrompt = mode === "code" ? CODE_PROMPT : CHAT_PROMPT;
+    let fullPrompt = systemPrompt;
+    if (systemSuffix) fullPrompt += systemSuffix;
 
     const resolvedModel = model || "minimax-free";
-    const stream = await streamZen(resolvedModel, messages, systemPrompt);
+    const stream = await streamZen(resolvedModel, messages, fullPrompt);
 
     return new Response(stream, {
       headers: {

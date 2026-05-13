@@ -10,18 +10,19 @@ import {
 } from "react";
 import {
   Send, Loader2, Menu, Sparkles, Copy, Check,
-  Download, RefreshCw, Bot, MessageSquare,
+  Download, RefreshCw, Bot, Code2, MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { Sidebar } from "./sidebar";
 import {
-  type Message, type ChatSession, SLASH_COMMANDS, AVAILABLE_MODELS,
-  getProviderForModel, generateId, estimateTokens, exportToMarkdown,
+  type Message, type ChatSession, type AIMode, SLASH_COMMANDS, AVAILABLE_MODELS,
+  SYSTEM_PROMPTS, getProviderForModel, generateId, estimateTokens, exportToMarkdown,
   saveSessionsToStorage, loadSessionsFromStorage,
   saveActiveSession, loadActiveSession,
   saveModel, loadModel,
+  saveMode, loadMode,
 } from "@/lib/chat";
 
 export function HJCodingIAApp() {
@@ -30,6 +31,7 @@ export function HJCodingIAApp() {
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [currentModel, setCurrentModel] = useState("minimax-free");
+  const [aiMode, setAiMode] = useState<AIMode>("chat");
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
@@ -45,15 +47,15 @@ export function HJCodingIAApp() {
   const messages = activeSession?.messages || [];
   const totalTokens = messages.reduce((acc, m) => acc + estimateTokens(m.content), 0);
   const currentModelInfo = AVAILABLE_MODELS.find((m) => m.id === currentModel);
-  const currentProvider = currentModelInfo ? getProviderForModel(currentModel) : undefined;
 
-  // ─── Cargar datos de localStorage al iniciar ───
+  // ─── Load from localStorage ───
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
     const savedSessions = loadSessionsFromStorage();
     const savedActive = loadActiveSession();
     const savedModel = loadModel();
+    const savedMode = loadMode();
     if (savedSessions.length > 0) {
       setSessions(savedSessions);
       if (savedActive && savedSessions.some(s => s.id === savedActive)) {
@@ -65,45 +67,32 @@ export function HJCodingIAApp() {
     if (savedModel && AVAILABLE_MODELS.some(m => m.id === savedModel)) {
       setCurrentModel(savedModel);
     }
+    setAiMode(savedMode);
   }, []);
 
-  // ─── Guardar en localStorage cuando cambien las sesiones ───
-  useEffect(() => {
-    if (sessions.length > 0) {
-      saveSessionsToStorage(sessions);
-    }
-  }, [sessions]);
-
-  useEffect(() => {
-    saveActiveSession(activeSessionId);
-  }, [activeSessionId]);
-
-  useEffect(() => {
-    saveModel(currentModel);
-  }, [currentModel]);
+  // ─── Save to localStorage ───
+  useEffect(() => { if (sessions.length > 0) saveSessionsToStorage(sessions); }, [sessions]);
+  useEffect(() => { saveActiveSession(activeSessionId); }, [activeSessionId]);
+  useEffect(() => { saveModel(currentModel); }, [currentModel]);
+  useEffect(() => { saveMode(aiMode); }, [aiMode]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
-
   useEffect(() => { scrollToBottom(); }, [messages, streamingContent, scrollToBottom]);
 
   const createNewSession = useCallback(() => {
     const id = generateId();
-    const session: ChatSession = { id, title: "Nueva conversación", messages: [], createdAt: Date.now(), updatedAt: Date.now(), model: currentModel };
+    const session: ChatSession = { id, title: "Nueva conversación", messages: [], createdAt: Date.now(), updatedAt: Date.now(), model: currentModel, mode: aiMode };
     setSessions((prev) => [session, ...prev]);
     setActiveSessionId(id);
     setStreamingContent("");
-  }, [currentModel]);
+  }, [currentModel, aiMode]);
 
   useEffect(() => { if (sessions.length === 0) createNewSession(); }, [sessions.length, createNewSession]);
 
   const deleteSession = useCallback((id: string) => {
-    setSessions((prev) => {
-      const next = prev.filter((s) => s.id !== id);
-      saveSessionsToStorage(next);
-      return next;
-    });
+    setSessions((prev) => { const next = prev.filter((s) => s.id !== id); saveSessionsToStorage(next); return next; });
     if (activeSessionId === id) {
       const remaining = sessions.filter((s) => s.id !== id);
       setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
@@ -124,9 +113,7 @@ export function HJCodingIAApp() {
       }
       return updated;
     }));
-    setTimeout(() => {
-      setMessageAnimations((prev) => { const next = new Set(prev); next.delete(msgId); return next; });
-    }, 500);
+    setTimeout(() => { setMessageAnimations((prev) => { const next = new Set(prev); next.delete(msgId); return next; }); }, 500);
   }, [activeSessionId]);
 
   const handleSlashCommand = useCallback((cmd: string) => {
@@ -134,16 +121,11 @@ export function HJCodingIAApp() {
     const command = parts[0].toLowerCase();
     switch (command) {
       case "/ayuda":
-        addMessage("assistant", `## Comandos disponibles\n\n${SLASH_COMMANDS.map((c) => `- **${c.name}** — ${c.desc}`).join("\n")}\n\nEscribe cualquier comando en el cuadro de texto para usarlo.`);
+        addMessage("assistant", `## Comandos disponibles\n\n${SLASH_COMMANDS.map((c) => `- **${c.name}** — ${c.desc}`).join("\n")}\n\nEscribe cualquier comando para usarlo.`);
         break;
       case "/limpiar":
         setSessions((prev) => prev.map((s) => s.id === activeSessionId ? { ...s, messages: [] } : s));
         break;
-      case "/compactar": {
-        const history = messages.map((m) => m.content).join("\n");
-        addMessage("assistant", `## Sesión compactada\n\nConversación anterior (${estimateTokens(history).toLocaleString()} tokens) comprimida. Continuando con contexto preservado.`);
-        break;
-      }
       case "/modelo": {
         const modelName = parts[1];
         if (modelName && AVAILABLE_MODELS.some((m) => m.id === modelName)) {
@@ -151,6 +133,17 @@ export function HJCodingIAApp() {
           addMessage("assistant", `Modelo cambiado a **${AVAILABLE_MODELS.find((m) => m.id === modelName)?.name}**.`);
         } else {
           addMessage("assistant", `## Modelos disponibles\n\n${AVAILABLE_MODELS.map((m) => `- **${m.name}** (\`${m.id}\`) — ${m.description}`).join("\n")}\n\nUsa \`/modelo <id>\` para cambiar.`);
+        }
+        break;
+      }
+      case "/modo": {
+        const newMode = parts[1];
+        if (newMode === 'chat' || newMode === 'codigo' || newMode === 'code') {
+          const m = newMode === 'chat' ? 'chat' : 'code';
+          setAiMode(m);
+          addMessage("assistant", `Modo cambiado a **${m === 'chat' ? 'Chat (texto simple)' : 'Código (programación)'}**.`);
+        } else {
+          addMessage("assistant", `Usa \`/modo chat\` para texto simple o \`/modo codigo\` para programación.`);
         }
         break;
       }
@@ -168,10 +161,10 @@ export function HJCodingIAApp() {
         addMessage("assistant", `Pensamiento extendido ${thinkingEnabled ? "desactivado" : "activado"}.`);
         break;
       case "/revisar":
-        addMessage("assistant", "Modo revisión activado. Pega tu código y haré una revisión completa cubriendo seguridad, rendimiento y buenas prácticas.");
+        addMessage("assistant", "Modo revisión activado. Pega tu código y haré una revisión completa.");
         break;
       case "/planear":
-        addMessage("assistant", "Modo planificación activado. Describe lo que quieres construir y crearé un plan detallado antes de escribir código.");
+        addMessage("assistant", "Modo planificación activado. Describe lo que quieres construir y crearé un plan detallado.");
         break;
       default:
         addMessage("assistant", `Comando desconocido: **${command}**. Escribe \`/ayuda\` para ver los comandos disponibles.`);
@@ -203,11 +196,7 @@ export function HJCodingIAApp() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: chatMessages,
-          model: currentModel,
-          systemSuffix,
-        }),
+        body: JSON.stringify({ messages: chatMessages, model: currentModel, systemSuffix, mode: aiMode }),
         signal: abortController.signal,
       });
 
@@ -242,7 +231,7 @@ export function HJCodingIAApp() {
     } finally {
       setIsLoading(false); setStreamingContent(""); abortControllerRef.current = null;
     }
-  }, [inputValue, isLoading, addMessage, messages, thinkingEnabled, currentModel, handleSlashCommand, streamingContent]);
+  }, [inputValue, isLoading, addMessage, messages, thinkingEnabled, currentModel, aiMode, handleSlashCommand, streamingContent]);
 
   const regenerateLastMessage = useCallback(async () => {
     if (isLoading || messages.length < 2) return;
@@ -273,26 +262,38 @@ export function HJCodingIAApp() {
   const filteredCommands = showCommands ? SLASH_COMMANDS.filter((c) => c.name.toLowerCase().startsWith(inputValue.toLowerCase())) : [];
   const inputTokenCount = estimateTokens(inputValue);
 
-  const quickActions = [
-    { icon: "💬", title: "Preguntar algo", desc: "Hazme cualquier pregunta", prompt: "¿Quién ganó el mundial de 2022?" },
-    { icon: "💻", title: "Programar", desc: "Ayuda con código", prompt: "Ayúdame a crear una API REST con Node.js" },
-    { icon: "✍️", title: "Escribir", desc: "Redactar textos", prompt: "Ayúdame a escribir un correo profesional" },
-    { icon: "🧠", title: "Analizar", desc: "Razonar y analizar", prompt: "Explícame las ventajas y desventajas de la inteligencia artificial" },
+  const chatQuickActions = [
+    { icon: "💬", title: "Preguntar", desc: "Hazme cualquier pregunta", prompt: "¿Quién ganó el mundial de 2022?" },
+    { icon: "✍️", title: "Escribir", desc: "Redactar textos", prompt: "Ayúdame a escribir un correo profesional para solicitar un aumento de sueldo" },
+    { icon: "🧠", title: "Analizar", desc: "Razonar y analizar", prompt: "Explícame las ventajas y desventajas de la inteligencia artificial en la educación" },
+    { icon: "🌍", title: "Traducir", desc: "Traducir textos", prompt: "Traduce al inglés: Buenos días, me gustaría agendar una reunión para la próxima semana" },
   ];
+
+  const codeQuickActions = [
+    { icon: "💻", title: "Crear app", desc: "Construir una aplicación", prompt: "Ayúdame a crear una API REST con Node.js y Express que maneje usuarios y autenticación" },
+    { icon: "🐛", title: "Debuggear", desc: "Encontrar errores", prompt: "Mi código da un error 'Cannot read property of undefined', ¿cómo lo soluciono?" },
+    { icon: "🏗️", title: "Arquitectura", desc: "Diseñar sistemas", prompt: "Diseña la arquitectura de un sistema de e-commerce con microservicios" },
+    { icon: "🧪", title: "Testing", desc: "Escribir tests", prompt: "Escribe tests unitarios completos para una función que valida emails" },
+  ];
+
+  const quickActions = aiMode === 'chat' ? chatQuickActions : codeQuickActions;
+  const modeLabel = aiMode === 'chat' ? 'Chat' : 'Código';
+  const ModeIcon = aiMode === 'chat' ? MessageCircle : Code2;
 
   return (
     <div className="h-screen flex bg-[#030303] overflow-hidden">
       <Sidebar
         sessions={sessions} activeSessionId={activeSessionId} currentModel={currentModel}
-        totalTokens={totalTokens} thinkingEnabled={thinkingEnabled}
+        totalTokens={totalTokens} thinkingEnabled={thinkingEnabled} aiMode={aiMode}
         onSelectSession={setActiveSessionId} onNewSession={createNewSession}
         onDeleteSession={deleteSession} onModelChange={setCurrentModel}
         onThinkingToggle={() => setThinkingEnabled((p) => !p)}
+        onModeChange={setAiMode}
         isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        {/* ─── Header ─── */}
+        {/* Header */}
         <header className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06] bg-[#080808]/80 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all">
@@ -300,21 +301,27 @@ export function HJCodingIAApp() {
             </button>
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-[#e91e63]/15 flex items-center justify-center">
-                <Bot className="w-3.5 h-3.5 text-[#e91e63]" />
+                <ModeIcon className="w-3.5 h-3.5 text-[#e91e63]" />
               </div>
-              <span className="text-sm font-medium text-neutral-300">{activeSession?.title || "HJ IA"}</span>
+              <span className="text-sm font-medium text-neutral-300">{activeSession?.title || `HJ IA — ${modeLabel}`}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* Mode Switcher */}
+            <div className="flex items-center bg-white/[0.04] rounded-lg border border-white/[0.06] p-0.5">
+              <button onClick={() => setAiMode('chat')} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${aiMode === 'chat' ? 'bg-[#e91e63]/15 text-[#e91e63] border border-[#e91e63]/20' : 'text-neutral-500 hover:text-neutral-300 border border-transparent'}`}>
+                <MessageCircle className="w-3 h-3" /> Chat
+              </button>
+              <button onClick={() => setAiMode('code')} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${aiMode === 'code' ? 'bg-[#e91e63]/15 text-[#e91e63] border border-[#e91e63]/20' : 'text-neutral-500 hover:text-neutral-300 border border-transparent'}`}>
+                <Code2 className="w-3 h-3" /> Código
+              </button>
+            </div>
             <Badge variant="outline" className="text-[10px] border-white/[0.08] text-neutral-400 bg-white/[0.02]">{currentModelInfo?.name}</Badge>
-            {currentModelInfo?.tag && (
-              <Badge variant="outline" className="text-[9px] border-[#e91e63]/20 text-[#e91e63]/80 bg-[#e91e63]/5">{currentModelInfo.tag}</Badge>
-            )}
             <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
           </div>
         </header>
 
-        {/* ─── Chat Area ─── */}
+        {/* Chat Area */}
         <div className="flex-1 overflow-y-auto">
           {messages.length === 0 && !isLoading ? (
             <div className="h-full flex flex-col items-center justify-center px-6 relative">
@@ -327,7 +334,19 @@ export function HJCodingIAApp() {
                   <img src="/hj-codingia-logo.png" alt="HJ IA" className="relative w-20 h-20 animate-float drop-shadow-[0_0_25px_rgba(233,30,99,0.25)]" />
                 </div>
                 <h2 className="text-3xl font-bold mb-2">Hola, soy <span className="text-gradient">HJ IA</span></h2>
-                <p className="text-neutral-500 text-sm text-center max-w-md mb-8 leading-relaxed">Tu asistente de IA para todo. Pregunta lo que quieras — código, textos, análisis, curiosidades, o lo que necesites.</p>
+                <p className="text-neutral-500 text-sm text-center max-w-md mb-2 leading-relaxed">
+                  {aiMode === 'chat'
+                    ? 'Tu asistente de IA para todo. Pregunta lo que quieras — curiosidades, textos, análisis, conversación.'
+                    : 'Tu asistente de programación. Escribe código, debuggea, diseña arquitectura — todo lo que necesites.'}
+                </p>
+                <div className="flex items-center gap-2 mb-6">
+                  <Badge variant="outline" className="text-[10px] border-[#e91e63]/20 text-[#e91e63]/80 bg-[#e91e63]/5">
+                    <ModeIcon className="w-3 h-3 mr-1" /> {modeLabel}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] border-white/[0.08] text-neutral-500 bg-white/[0.02]">
+                    {currentModelInfo?.name}
+                  </Badge>
+                </div>
                 <div className="grid grid-cols-2 gap-2.5 w-full max-w-lg">
                   {quickActions.map((item) => (
                     <button key={item.title} onClick={() => { setInputValue(item.prompt); inputRef.current?.focus(); }} className="flex items-center gap-3 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-[#e91e63]/25 hover:bg-[#e91e63]/5 transition-all text-left group">
@@ -389,7 +408,7 @@ export function HJCodingIAApp() {
           )}
         </div>
 
-        {/* ─── Input Area ─── */}
+        {/* Input Area */}
         <div className="border-t border-white/[0.06] bg-[#080808]/80 backdrop-blur-xl px-4 py-3">
           <div className="max-w-3xl mx-auto">
             {showCommands && filteredCommands.length > 0 && (
@@ -408,7 +427,7 @@ export function HJCodingIAApp() {
                 <textarea
                   ref={inputRef} value={inputValue} onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Escribe tu mensaje... ( / para comandos)"
+                  placeholder={aiMode === 'chat' ? "Escribe tu mensaje... ( / para comandos)" : "Describe tu código o problema... ( / para comandos)"}
                   rows={1}
                   className="w-full resize-none rounded-2xl bg-[#0a0a0a] border border-white/[0.08] focus:border-[#e91e63]/40 focus:ring-1 focus:ring-[#e91e63]/20 px-4 pr-16 py-3 text-sm text-neutral-200 placeholder:text-neutral-600 transition-all outline-none"
                   style={{ minHeight: "46px", maxHeight: "200px", height: "auto" }}
@@ -425,13 +444,13 @@ export function HJCodingIAApp() {
             </form>
             <div className="flex items-center justify-between mt-1.5 text-[10px] text-neutral-700">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-3 h-3" />
-                <span>{currentModelInfo?.name}</span>
-                {thinkingEnabled && <span className="text-purple-400">🧠 Pensamiento</span>}
+                <ModeIcon className="w-3 h-3" />
+                <span>{modeLabel} · {currentModelInfo?.name}</span>
+                {thinkingEnabled && <span className="text-purple-400">🧠</span>}
               </div>
               <div className="flex items-center gap-3">
                 <span>~{totalTokens.toLocaleString()} tokens</span>
-                <span>{messages.length} mensajes</span>
+                <span>{messages.length} msgs</span>
               </div>
             </div>
           </div>
