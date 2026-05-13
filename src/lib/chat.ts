@@ -31,8 +31,9 @@ export interface ModelInfo {
   free?: boolean;
 }
 
+// Same providers as claurst — OpenCode Zen as primary free provider
 export const PROVIDERS: Provider[] = [
-  { id: 'z-ai', name: 'Z AI', color: '#e91e63', icon: '⚡', description: 'Z AI models — free, auto-fallback on Vercel', free: true },
+  { id: 'free', name: 'OpenCode Zen', color: '#00e676', icon: '🆓', description: 'Free AI models — no API key needed (like claurst)', free: true },
   { id: 'anthropic', name: 'Anthropic', color: '#d4a574', icon: '🧠', description: 'Claude family models' },
   { id: 'openai', name: 'OpenAI', color: '#10a37f', icon: '🔮', description: 'GPT family models' },
   { id: 'google', name: 'Google', color: '#4285f4', icon: '✨', description: 'Gemini family models' },
@@ -40,11 +41,16 @@ export const PROVIDERS: Provider[] = [
   { id: 'mistral', name: 'Mistral', color: '#ff7000', icon: '🌀', description: 'Mistral family models' },
 ] as const;
 
+// Same free models as claurst's FreeProvider
 export const AVAILABLE_MODELS: ModelInfo[] = [
-  // ─── Z AI models (free — auto-fallback on Vercel) ───
-  { id: 'glm-4-flash', name: 'GLM-4 Flash', provider: 'z-ai', description: 'Fast and smart — works everywhere', free: true },
-  { id: 'glm-4-plus', name: 'GLM-4 Plus', provider: 'z-ai', description: 'Most capable Z AI model', free: true },
-  { id: 'glm-4-long', name: 'GLM-4 Long', provider: 'z-ai', description: 'Extended context window', free: true },
+  // ─── Free models via OpenCode Zen (no API key — same as claurst) ───
+  { id: 'minimax-free', name: 'MiniMax M2.5 Free', provider: 'free', description: 'Best free coding model — fast & smart', free: true },
+  { id: 'deepseek-r1-free', name: 'DeepSeek R1 Free', provider: 'free', description: 'Powerful reasoning, free tier', free: true },
+  { id: 'qwen3-free', name: 'Qwen3 Free', provider: 'free', description: 'Great for multilingual code', free: true },
+  { id: 'big-pickle-free', name: 'Big Pickle Free', provider: 'free', description: 'Large context free model', free: true },
+  { id: 'nemotron-free', name: 'Nemotron Super Free', provider: 'free', description: 'NVIDIA free tier model', free: true },
+  { id: 'ring-free', name: 'Ring 2.6 Free', provider: 'free', description: '1T context window free', free: true },
+  { id: 'openrouter-free', name: 'OpenRouter Free', provider: 'free', description: 'Auto-routes to best free model', free: true },
 
   // ─── Anthropic (requires API key) ───
   { id: 'claude-4-sonnet', name: 'Claude 4 Sonnet', provider: 'anthropic', description: 'Balanced intelligence and speed' },
@@ -109,19 +115,13 @@ export function isModelFree(modelId: string): boolean {
 
 export function formatCost(tokens: number, model: string): number {
   const rates: Record<string, [number, number]> = {
-    'glm-4-flash': [0, 0],
-    'glm-4-plus': [0, 0],
-    'glm-4-long': [0, 0],
-    'claude-4-sonnet': [0.003, 0.015],
-    'claude-4-opus': [0.015, 0.075],
-    'gpt-4o': [0.005, 0.015],
-    'gpt-4-turbo': [0.01, 0.03],
-    'gemini-pro': [0.003, 0.015],
-    'gemini-flash': [0.001, 0.005],
-    'deepseek-v3': [0.002, 0.008],
-    'deepseek-coder': [0.002, 0.008],
-    'mistral-large': [0.004, 0.012],
-    'codestral': [0.002, 0.006],
+    'minimax-free': [0, 0], 'deepseek-r1-free': [0, 0], 'qwen3-free': [0, 0],
+    'big-pickle-free': [0, 0], 'nemotron-free': [0, 0], 'ring-free': [0, 0], 'openrouter-free': [0, 0],
+    'claude-4-sonnet': [0.003, 0.015], 'claude-4-opus': [0.015, 0.075],
+    'gpt-4o': [0.005, 0.015], 'gpt-4-turbo': [0.01, 0.03],
+    'gemini-pro': [0.003, 0.015], 'gemini-flash': [0.001, 0.005],
+    'deepseek-v3': [0.002, 0.008], 'deepseek-coder': [0.002, 0.008],
+    'mistral-large': [0.004, 0.012], 'codestral': [0.002, 0.006],
   };
   const [inputRate] = rates[model] || [0, 0];
   return (tokens * inputRate) / 1000;
@@ -132,8 +132,7 @@ export function exportToMarkdown(messages: Message[]): string {
   for (const msg of messages) {
     const time = new Date(msg.timestamp).toLocaleString();
     const role = msg.role === 'user' ? 'You' : 'HJ CodingIA';
-    lines.push(`## ${role} — ${time}`, '');
-    lines.push(msg.content, '');
+    lines.push(`## ${role} — ${time}`, '', msg.content, '');
   }
   return lines.join('\n');
 }

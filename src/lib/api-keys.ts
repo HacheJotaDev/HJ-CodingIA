@@ -16,12 +16,8 @@ export function getApiKeys(): ApiKeys {
   }
   try {
     const stored = localStorage.getItem(API_KEYS_STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch {
-    // ignore
-  }
+    if (stored) return JSON.parse(stored);
+  } catch { /* ignore */ }
   return { anthropic: "", openai: "", google: "", deepseek: "", mistral: "" };
 }
 
@@ -36,8 +32,7 @@ export function getApiKeyForProvider(provider: string): string {
 }
 
 export function hasApiKeyForProvider(provider: string): boolean {
-  const key = getApiKeyForProvider(provider);
-  return key.trim().length > 0;
+  return getApiKeyForProvider(provider).trim().length > 0;
 }
 
 export function hasAnyApiKey(): boolean {

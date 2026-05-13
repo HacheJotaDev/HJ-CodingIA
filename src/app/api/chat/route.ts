@@ -17,7 +17,50 @@ Key behaviors:
 
 You have deep knowledge of Rust, TypeScript, Python, Go, and all major languages and frameworks.`;
 
-// ─── OpenAI-compatible streaming ───
+// ─── Model ID translation (exactly like claurst's FreeProvider) ───
+// claurst source: providers/free.rs - translate_for_primary / translate_for_fallback
+
+function translateForZen(model: string): string {
+  switch (model) {
+    case "free":
+    case "free/auto":
+    case "auto":
+    case "minimax-free":
+      return "minimax-m2.5-free";
+    case "deepseek-r1-free":
+      return "deepseek-r1-free";
+    case "qwen3-free":
+      return "qwen3-free";
+    case "big-pickle-free":
+      return "big-pickle";
+    case "nemotron-free":
+      return "nemotron-3-super-free";
+    case "ring-free":
+      return "ring-2.6-1t-free";
+    default:
+      return model.replace(/^zen\//, "").replace(/^opencode-zen\//, "");
+  }
+}
+
+function translateForOpenRouter(model: string): string {
+  switch (model) {
+    case "free":
+    case "free/auto":
+    case "auto":
+    case "minimax-free":
+    case "deepseek-r1-free":
+    case "qwen3-free":
+    case "big-pickle-free":
+    case "nemotron-free":
+    case "ring-free":
+      return "openrouter/free";
+    default:
+      if (model.startsWith("zen/")) return "openrouter/free";
+      return model;
+  }
+}
+
+// ─── OpenAI-compatible streaming (used by Zen, OpenRouter, OpenAI, DeepSeek, Mistral) ───
 async function streamOpenAICompatible(
   endpoint: string,
   apiKey: string | undefined,
@@ -87,101 +130,13 @@ async function streamOpenAICompatible(
   });
 }
 
-// ─── Z AI SDK with streaming (primary — works locally) ───
-async function streamZAI(
+// ─── PRIMARY: OpenCode Zen (like claurst — no API key needed for free models) ───
+async function streamZen(
   model: string,
   messages: { role: string; content: string }[],
   systemPrompt: string
 ): Promise<ReadableStream<Uint8Array>> {
-  const apiMessages = [
-    { role: "system" as const, content: systemPrompt },
-    ...messages.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
-  ];
-
-  try {
-    const mod = await import("z-ai-web-dev-sdk");
-    const ZAI = mod.default;
-    const zai = await ZAI.create();
-
-    const completion = await zai.chat.completions.create({
-      messages: apiMessages,
-      model: model || "glm-4-flash",
-      temperature: 0.7,
-      max_tokens: 8192,
-      stream: true,
-    });
-
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-
-    // Handle streaming response
-    if (completion && typeof completion === "object") {
-      // If it's a ReadableStream (streaming mode)
-      if ("getReader" in completion) {
-        const reader = (completion as ReadableStream<Uint8Array>).getReader();
-        return new ReadableStream<Uint8Array>({
-          async pull(controller) {
-            try {
-              const { done, value } = await reader.read();
-              if (done) { controller.close(); return; }
-              const chunk = decoder.decode(value, { stream: true });
-              const lines = chunk.split("\n");
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || !trimmed.startsWith("data: ")) continue;
-                const data = trimmed.slice(6);
-                if (data === "[DONE]") { controller.close(); return; }
-                try {
-                  const parsed = JSON.parse(data);
-                  const content = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.message?.content;
-                  if (content) controller.enqueue(encoder.encode(content));
-                } catch { /* skip */ }
-              }
-            } catch (err) { controller.error(err); }
-          },
-          cancel() { reader.cancel(); },
-        });
-      }
-
-      // Non-streaming fallback — convert to stream
-      const content = (completion as { choices?: { message?: { content?: string } }[] }).choices?.[0]?.message?.content || "";
-      return new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(encoder.encode(content));
-          controller.close();
-        },
-      });
-    }
-
-    throw new Error("Z_AI_UNAVAILABLE");
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Unknown";
-    // If the error is about missing config, throw a specific marker
-    if (msg.includes(".z-ai-config") || msg.includes("Configuration file") || msg.includes("config")) {
-      throw new Error("Z_AI_NO_CONFIG");
-    }
-    throw new Error(`Z_AI_ERROR: ${msg}`);
-  }
-}
-
-// ─── OpenCode Zen fallback (works on Vercel without config) ───
-async function streamZenFree(
-  model: string,
-  messages: { role: string; content: string }[],
-  systemPrompt: string
-): Promise<ReadableStream<Uint8Array>> {
-  // Map Z AI model names to Zen equivalents
-  let zenModel = model;
-  switch (model) {
-    case "glm-4-plus": zenModel = "minimax-m2.5-free"; break;
-    case "glm-4-flash": zenModel = "minimax-m2.5-free"; break;
-    case "glm-4-long": zenModel = "minimax-m2.5-free"; break;
-    default: break;
-  }
-
+  const zenModel = translateForZen(model);
   return streamOpenAICompatible(
     "https://opencode.ai/zen/v1/chat/completions",
     process.env.OPENCODE_API_KEY || undefined,
@@ -191,16 +146,17 @@ async function streamZenFree(
   );
 }
 
-// ─── OpenRouter free fallback ───
-async function streamOpenRouterFree(
+// ─── FALLBACK: OpenRouter Free (like claurst — no API key needed) ───
+async function streamOpenRouter(
   model: string,
   messages: { role: string; content: string }[],
   systemPrompt: string
 ): Promise<ReadableStream<Uint8Array>> {
+  const orModel = translateForOpenRouter(model);
   return streamOpenAICompatible(
     "https://openrouter.ai/api/v1/chat/completions",
     process.env.OPENROUTER_API_KEY || undefined,
-    "openrouter/free",
+    orModel,
     messages,
     systemPrompt,
     {
@@ -210,49 +166,37 @@ async function streamOpenRouterFree(
   );
 }
 
-// ─── Auto-fallback chain: Z AI → Zen → OpenRouter ───
-async function streamWithFallback(
+// ─── Free provider with auto-fallback (exactly like claurst's FreeProvider) ───
+// claurst tries Zen first, then OpenRouter on pre-stream failure
+async function streamFree(
   model: string,
   messages: { role: string; content: string }[],
   systemPrompt: string
 ): Promise<ReadableStream<Uint8Array>> {
   const errors: string[] = [];
 
-  // 1. Try Z AI SDK (works locally with .z-ai-config)
+  // 1. Try OpenCode Zen (PRIMARY — same as claurst)
   try {
-    return await streamZAI(model, messages, systemPrompt);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Unknown";
-    if (msg === "Z_AI_NO_CONFIG") {
-      // Config not found — expected on Vercel, try next provider
-      errors.push("Z AI: No config (expected on Vercel)");
-    } else {
-      errors.push(`Z AI: ${msg}`);
-    }
-  }
-
-  // 2. Try OpenCode Zen (works without config, free models)
-  try {
-    return await streamZenFree(model, messages, systemPrompt);
+    return await streamZen(model, messages, systemPrompt);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown";
     errors.push(`Zen: ${msg}`);
   }
 
-  // 3. Try OpenRouter free
+  // 2. Fallback: OpenRouter Free (same as claurst)
   try {
-    return await streamOpenRouterFree(model, messages, systemPrompt);
+    return await streamOpenRouter(model, messages, systemPrompt);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown";
     errors.push(`OpenRouter: ${msg}`);
   }
 
   throw new Error(
-    `All providers failed. Errors: ${errors.join(" | ")}. Try adding an API key in Settings.`
+    `All free providers failed. ${errors.join(" | ")}. Try again or switch models.`
   );
 }
 
-// ─── Anthropic Messages API ───
+// ─── Anthropic Messages API (requires API key) ───
 async function streamAnthropic(
   apiKey: string,
   model: string,
@@ -273,17 +217,13 @@ async function streamAnthropic(
       "anthropic-dangerous-direct-browser-access": "true",
     },
     body: JSON.stringify({
-      model,
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: apiMessages,
-      stream: true,
+      model, max_tokens: 8192, system: systemPrompt, messages: apiMessages, stream: true,
     }),
   });
 
   if (!res.ok) {
     const err = await res.text().catch(() => "Unknown error");
-    throw new Error(`Anthropic API error ${res.status}: ${err}`);
+    throw new Error(`Anthropic error ${res.status}: ${err}`);
   }
 
   const reader = res.body?.getReader();
@@ -297,8 +237,7 @@ async function streamAnthropic(
         const { done, value } = await reader.read();
         if (done) { controller.close(); return; }
         const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-        for (const line of lines) {
+        for (const line of chunk.split("\n")) {
           const trimmed = line.trim();
           if (!trimmed || !trimmed.startsWith("data: ")) continue;
           try {
@@ -316,7 +255,7 @@ async function streamAnthropic(
   });
 }
 
-// ─── Google Gemini API ───
+// ─── Google Gemini API (requires API key) ───
 async function streamGoogle(
   apiKey: string,
   model: string,
@@ -343,7 +282,7 @@ async function streamGoogle(
 
   if (!res.ok) {
     const err = await res.text().catch(() => "Unknown error");
-    throw new Error(`Google API error ${res.status}: ${err}`);
+    throw new Error(`Google error ${res.status}: ${err}`);
   }
 
   const reader = res.body?.getReader();
@@ -357,8 +296,7 @@ async function streamGoogle(
         const { done, value } = await reader.read();
         if (done) { controller.close(); return; }
         const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-        for (const line of lines) {
+        for (const line of chunk.split("\n")) {
           const trimmed = line.trim();
           if (!trimmed || !trimmed.startsWith("data: ")) continue;
           try {
@@ -373,7 +311,7 @@ async function streamGoogle(
   });
 }
 
-// ─── Provider model mapping ───
+// ─── Model → Provider mapping ───
 const PROVIDER_MODEL_MAP: Record<string, string> = {
   "claude-4-sonnet": "claude-sonnet-4-20250514",
   "claude-4-opus": "claude-opus-4-20250514",
@@ -388,10 +326,14 @@ const PROVIDER_MODEL_MAP: Record<string, string> = {
 };
 
 const MODEL_TO_PROVIDER: Record<string, string> = {
-  // Z AI models (auto-fallback: Z AI SDK → Zen → OpenRouter)
-  "glm-4-plus": "z-ai",
-  "glm-4-flash": "z-ai",
-  "glm-4-long": "z-ai",
+  // Free models → OpenCode Zen + OpenRouter fallback
+  "minimax-free": "free",
+  "deepseek-r1-free": "free",
+  "qwen3-free": "free",
+  "big-pickle-free": "free",
+  "nemotron-free": "free",
+  "ring-free": "free",
+  "openrouter-free": "free",
   // Paid models
   "claude-4-sonnet": "anthropic",
   "claude-4-opus": "anthropic",
@@ -412,62 +354,54 @@ export async function POST(req: NextRequest) {
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "Messages array is required" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
+        status: 400, headers: { "Content-Type": "application/json" },
       });
     }
 
     let systemPrompt = SYSTEM_PROMPT;
     if (systemSuffix) systemPrompt += systemSuffix;
 
-    const resolvedProvider = provider || MODEL_TO_PROVIDER[model] || "z-ai";
+    const resolvedProvider = provider || MODEL_TO_PROVIDER[model] || "free";
     const apiModel = PROVIDER_MODEL_MAP[model] || model;
 
     let stream: ReadableStream<Uint8Array>;
 
     switch (resolvedProvider) {
-      // Z AI with auto-fallback (no API key needed)
-      case "z-ai":
-        stream = await streamWithFallback(model, messages, systemPrompt);
+      // ─── Free: OpenCode Zen → OpenRouter (like claurst) ───
+      case "free":
+      case "zen":
+      case "openrouter":
+        stream = await streamFree(model, messages, systemPrompt);
         break;
 
-      // Paid providers (require API key)
+      // ─── Paid providers ───
       case "anthropic": {
-        if (!apiKey) throw new Error("Anthropic API key required. Go to Settings → API Keys to add your key.");
+        if (!apiKey) throw new Error("Anthropic API key required. Add it in Settings → API Keys.");
         stream = await streamAnthropic(apiKey, apiModel, messages, systemPrompt);
         break;
       }
       case "openai": {
-        if (!apiKey) throw new Error("OpenAI API key required. Go to Settings → API Keys to add your key.");
-        stream = await streamOpenAICompatible(
-          "https://api.openai.com/v1/chat/completions",
-          apiKey, apiModel, messages, systemPrompt
-        );
+        if (!apiKey) throw new Error("OpenAI API key required. Add it in Settings → API Keys.");
+        stream = await streamOpenAICompatible("https://api.openai.com/v1/chat/completions", apiKey, apiModel, messages, systemPrompt);
         break;
       }
       case "deepseek": {
-        if (!apiKey) throw new Error("DeepSeek API key required. Go to Settings → API Keys to add your key.");
-        stream = await streamOpenAICompatible(
-          "https://api.deepseek.com/v1/chat/completions",
-          apiKey, apiModel, messages, systemPrompt
-        );
+        if (!apiKey) throw new Error("DeepSeek API key required. Add it in Settings → API Keys.");
+        stream = await streamOpenAICompatible("https://api.deepseek.com/v1/chat/completions", apiKey, apiModel, messages, systemPrompt);
         break;
       }
       case "mistral": {
-        if (!apiKey) throw new Error("Mistral API key required. Go to Settings → API Keys to add your key.");
-        stream = await streamOpenAICompatible(
-          "https://api.mistral.ai/v1/chat/completions",
-          apiKey, apiModel, messages, systemPrompt
-        );
+        if (!apiKey) throw new Error("Mistral API key required. Add it in Settings → API Keys.");
+        stream = await streamOpenAICompatible("https://api.mistral.ai/v1/chat/completions", apiKey, apiModel, messages, systemPrompt);
         break;
       }
       case "google": {
-        if (!apiKey) throw new Error("Google API key required. Go to Settings → API Keys to add your key.");
+        if (!apiKey) throw new Error("Google API key required. Add it in Settings → API Keys.");
         stream = await streamGoogle(apiKey, apiModel, messages, systemPrompt);
         break;
       }
       default:
-        stream = await streamWithFallback(model, messages, systemPrompt);
+        stream = await streamFree(model, messages, systemPrompt);
     }
 
     return new Response(stream, {
@@ -481,8 +415,7 @@ export async function POST(req: NextRequest) {
     console.error("Chat API error:", error);
     const message = error instanceof Error ? error.message : "Internal server error";
     return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
+      status: 500, headers: { "Content-Type": "application/json" },
     });
   }
 }
