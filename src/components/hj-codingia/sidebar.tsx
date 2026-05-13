@@ -54,50 +54,30 @@ interface SidebarProps {
 }
 
 export function Sidebar({
-  sessions,
-  activeSessionId,
-  currentModel,
-  totalTokens,
-  speechMode,
-  thinkingEnabled,
-  onSelectSession,
-  onNewSession,
-  onDeleteSession,
-  onModelChange,
-  onSpeechModeChange,
-  onThinkingToggle,
-  isOpen,
-  onToggle,
+  sessions, activeSessionId, currentModel, totalTokens,
+  speechMode, thinkingEnabled, onSelectSession, onNewSession,
+  onDeleteSession, onModelChange, onSpeechModeChange, onThinkingToggle,
+  isOpen, onToggle,
 }: SidebarProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [sessionSearch, setSessionSearch] = useState("");
-  const [expandedProviders, setExpandedProviders] = useState<string[]>(
-    PROVIDERS.map((p) => p.id)
-  );
+  const [expandedProviders, setExpandedProviders] = useState<string[]>(PROVIDERS.map((p) => p.id));
   const [apiKeys, setApiKeys] = useState<ApiKeys>(() => getApiKeys());
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [keysSaved, setKeysSaved] = useState(false);
 
   const currentModelInfo = AVAILABLE_MODELS.find((m) => m.id === currentModel);
-  const currentProvider = currentModelInfo
-    ? PROVIDERS.find((p) => p.id === currentModelInfo.provider)
-    : undefined;
+  const currentProvider = currentModelInfo ? PROVIDERS.find((p) => p.id === currentModelInfo.provider) : undefined;
 
   const filteredSessions = useMemo(() => {
     if (!sessionSearch.trim()) return sessions;
     const query = sessionSearch.toLowerCase();
-    return sessions.filter((s) =>
-      s.title.toLowerCase().includes(query)
-    );
+    return sessions.filter((s) => s.title.toLowerCase().includes(query));
   }, [sessions, sessionSearch]);
 
   const toggleProvider = (providerId: string) => {
-    setExpandedProviders((prev) =>
-      prev.includes(providerId)
-        ? prev.filter((id) => id !== providerId)
-        : [...prev, providerId]
-    );
+    setExpandedProviders((prev) => prev.includes(providerId) ? prev.filter((id) => id !== providerId) : [...prev, providerId]);
   };
 
   const handleSaveApiKeys = useCallback(() => {
@@ -115,166 +95,85 @@ export function Sidebar({
     setShowKeys((prev) => ({ ...prev, [provider]: !prev[provider] }));
   }, []);
 
-  // Providers that need API keys (Free provider doesn't need keys)
   const apiKeyProviders = PROVIDERS.filter((p) => !p.free);
 
   return (
     <>
-      {/* Mobile overlay */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm"
-          onClick={onToggle}
-        />
-      )}
+      {isOpen && <div className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm" onClick={onToggle} />}
 
-      <aside
-        className={`fixed md:relative z-50 top-0 left-0 h-full transition-all duration-300 ease-in-out ${
-          isOpen ? "w-72" : "w-0 md:w-12"
-        } overflow-hidden bg-[#080808] border-r border-white/[0.06] flex flex-col`}
-      >
+      <aside className={`fixed md:relative z-50 top-0 left-0 h-full transition-all duration-300 ease-in-out ${isOpen ? "w-72" : "w-0 md:w-12"} overflow-hidden bg-[#080808] border-r border-white/[0.06] flex flex-col`}>
         {!isOpen ? (
-          /* Collapsed state */
           <div className="flex flex-col items-center py-4 gap-3">
-            <button
-              onClick={onToggle}
-              className="p-2 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all"
-            >
+            <button onClick={onToggle} className="p-2 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all">
               <ChevronLeft className="w-4 h-4 rotate-180" />
             </button>
-            <button
-              onClick={onToggle}
-              className="p-2 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all"
-            >
+            <button onClick={onToggle} className="p-2 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all">
               <MessageSquare className="w-4 h-4" />
             </button>
           </div>
         ) : (
-          /* Expanded state */
           <>
-            {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
               <div className="flex items-center gap-2.5">
-                <img
-                  src="/hj-codingia-logo.png"
-                  alt="HJ CodingIA"
-                  className="w-7 h-7"
-                />
-                <span className="font-bold tracking-wider text-sm">
-                  HJ CODINGIA
-                </span>
+                <img src="/hj-codingia-logo.png" alt="HJ CodingIA" className="w-7 h-7" />
+                <span className="font-bold tracking-wider text-sm">HJ CODINGIA</span>
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  onClick={onToggle}
-                  className="p-1.5 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all md:hidden"
-                >
+                <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all md:hidden">
                   <X className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={onToggle}
-                  className="p-1.5 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all hidden md:block"
-                >
+                <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-white/[0.06] text-neutral-500 hover:text-white transition-all hidden md:block">
                   <ChevronLeft className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            {/* New chat button */}
             <div className="px-3 py-3">
-              <Button
-                onClick={onNewSession}
-                className="w-full bg-[#e91e63]/10 hover:bg-[#e91e63]/20 border border-[#e91e63]/20 text-[#e91e63] hover:text-[#ff2a76] justify-start gap-2 text-sm font-medium"
-              >
+              <Button onClick={onNewSession} className="w-full bg-[#e91e63]/10 hover:bg-[#e91e63]/20 border border-[#e91e63]/20 text-[#e91e63] hover:text-[#ff2a76] justify-start gap-2 text-sm font-medium">
                 <Plus className="w-4 h-4" />
                 New Chat
               </Button>
             </div>
 
-            {/* Session search */}
             <div className="px-3 pb-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-neutral-600" />
-                <input
-                  type="text"
-                  value={sessionSearch}
-                  onChange={(e) => setSessionSearch(e.target.value)}
-                  placeholder="Search sessions..."
-                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg pl-8 pr-3 py-1.5 text-xs text-neutral-300 placeholder:text-neutral-600 focus:outline-none focus:border-[#e91e63]/30 transition-colors"
-                />
+                <input type="text" value={sessionSearch} onChange={(e) => setSessionSearch(e.target.value)} placeholder="Search sessions..." className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg pl-8 pr-3 py-1.5 text-xs text-neutral-300 placeholder:text-neutral-600 focus:outline-none focus:border-[#e91e63]/30 transition-colors" />
               </div>
             </div>
 
-            {/* Sessions */}
             <div className="flex-1 overflow-y-auto px-3 space-y-1">
-              <div className="text-[10px] font-semibold text-neutral-600 uppercase tracking-widest px-2 mb-2">
-                Sessions
-              </div>
+              <div className="text-[10px] font-semibold text-neutral-600 uppercase tracking-widest px-2 mb-2">Sessions</div>
               {filteredSessions.map((session) => (
                 <div
                   key={session.id}
-                  className={`group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all ${
-                    activeSessionId === session.id
-                      ? "bg-[#e91e63]/10 border border-[#e91e63]/20 text-white"
-                      : "hover:bg-white/[0.04] text-neutral-400 border border-transparent"
-                  }`}
+                  className={`group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all ${activeSessionId === session.id ? "bg-[#e91e63]/10 border border-[#e91e63]/20 text-white" : "hover:bg-white/[0.04] text-neutral-400 border border-transparent"}`}
                   onClick={() => onSelectSession(session.id)}
                 >
                   <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-xs truncate flex-1">
-                    {session.title}
-                  </span>
-                  <span className="text-[9px] text-neutral-600 flex-shrink-0">
-                    {session.messages.length}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteSession(session.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/[0.06] text-neutral-600 hover:text-red-400 transition-all"
-                  >
+                  <span className="text-xs truncate flex-1">{session.title}</span>
+                  <span className="text-[9px] text-neutral-600 flex-shrink-0">{session.messages.length}</span>
+                  <button onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/[0.06] text-neutral-600 hover:text-red-400 transition-all">
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
               ))}
-              {sessions.length === 0 && (
-                <p className="text-xs text-neutral-600 px-2 py-4 text-center">
-                  No sessions yet. Start a new chat!
-                </p>
-              )}
-              {sessions.length > 0 && filteredSessions.length === 0 && (
-                <p className="text-xs text-neutral-600 px-2 py-4 text-center">
-                  No sessions match your search.
-                </p>
-              )}
             </div>
 
-            {/* Status & Settings */}
             <div className="border-t border-white/[0.06]">
-              {/* Status bar */}
               <div className="px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full animate-pulse ${
-                    currentProvider?.free || (currentProvider && hasApiKeyForProvider(currentProvider.id)) ? "bg-green-500" : "bg-yellow-500"
-                  }`} />
-                  <span className="text-[10px] text-neutral-500 font-mono">
-                    {currentModelInfo?.name || currentModel}
-                  </span>
+                  <div className={`w-2 h-2 rounded-full animate-pulse ${currentProvider?.free || (currentProvider && hasApiKeyForProvider(currentProvider.id)) ? "bg-green-500" : "bg-yellow-500"}`} />
+                  <span className="text-[10px] text-neutral-500 font-mono">{currentModelInfo?.name || currentModel}</span>
                 </div>
-                <span className="text-[10px] text-neutral-600 font-mono">
-                  ~{totalTokens.toLocaleString()} tokens
-                </span>
+                <span className="text-[10px] text-neutral-600 font-mono">~{totalTokens.toLocaleString()} tokens</span>
               </div>
 
-              {/* Provider badge */}
               {currentProvider && (
                 <div className="px-4 pb-2 flex items-center gap-2">
                   <ProviderBadge providerId={currentProvider.id} size="sm" />
                   {currentProvider.free ? (
-                    <span className="text-[9px] text-green-400 flex items-center gap-0.5">
-                      Free
-                    </span>
+                    <span className="text-[9px] text-green-400">Free</span>
                   ) : !hasApiKeyForProvider(currentProvider.id) ? (
                     <span className="text-[9px] text-yellow-500 flex items-center gap-0.5">
                       <Key className="w-2.5 h-2.5" /> Key needed
@@ -283,57 +182,36 @@ export function Sidebar({
                 </div>
               )}
 
-              {/* Mode indicators */}
               {(speechMode !== "normal" || thinkingEnabled) && (
                 <div className="px-4 pb-2 flex items-center gap-2 flex-wrap">
                   {speechMode !== "normal" && (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] border-[#e91e63]/30 text-[#e91e63] bg-[#e91e63]/5 py-0"
-                    >
+                    <Badge variant="outline" className="text-[10px] border-[#e91e63]/30 text-[#e91e63] bg-[#e91e63]/5 py-0">
                       {speechMode === "caveman" ? "🦣 Caveman" : "🪨 Rocky"}
                     </Badge>
                   )}
                   {thinkingEnabled && (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] border-purple-500/30 text-purple-400 bg-purple-500/5 py-0"
-                    >
-                      <Brain className="w-2.5 h-2.5 mr-1" />
-                      Thinking
+                    <Badge variant="outline" className="text-[10px] border-purple-500/30 text-purple-400 bg-purple-500/5 py-0">
+                      <Brain className="w-2.5 h-2.5 mr-1" /> Thinking
                     </Badge>
                   )}
                 </div>
               )}
 
-              {/* API Keys button */}
-              <button
-                onClick={() => { setShowApiKeys(!showApiKeys); setShowSettings(false); }}
-                className="w-full flex items-center gap-2 px-4 py-3 text-xs text-neutral-500 hover:text-white hover:bg-white/[0.03] transition-all border-t border-white/[0.06]"
-              >
-                <Key className="w-3.5 h-3.5" />
-                API Keys
-                <ChevronDown
-                  className={`w-3 h-3 ml-auto transition-transform ${
-                    showApiKeys ? "rotate-180" : ""
-                  }`}
-                />
+              <button onClick={() => { setShowApiKeys(!showApiKeys); setShowSettings(false); }} className="w-full flex items-center gap-2 px-4 py-3 text-xs text-neutral-500 hover:text-white hover:bg-white/[0.03] transition-all border-t border-white/[0.06]">
+                <Key className="w-3.5 h-3.5" /> API Keys
+                <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${showApiKeys ? "rotate-180" : ""}`} />
               </button>
 
-              {/* API Keys panel */}
               {showApiKeys && (
                 <div className="px-4 pb-4 space-y-3 border-t border-white/[0.06] pt-3 animate-fade-in max-h-80 overflow-y-auto">
                   <p className="text-[10px] text-neutral-600 leading-relaxed">
-                    Free models work out of the box without any key. Add keys for premium providers (OpenAI, Anthropic, etc.) if you want to use them. Keys are stored locally in your browser.
+                    Z AI models work out of the box without any key. Add keys for premium providers (OpenAI, Anthropic, etc.) if you want to use them. Keys are stored locally in your browser.
                   </p>
                   {apiKeyProviders.map((provider) => (
                     <div key={provider.id}>
                       <label className="text-[10px] font-semibold uppercase tracking-widest mb-1.5 flex items-center gap-1.5" style={{ color: provider.color }}>
-                        <span>{provider.icon}</span>
-                        {provider.name}
-                        {hasApiKeyForProvider(provider.id) && (
-                          <Check className="w-2.5 h-2.5 text-green-400" />
-                        )}
+                        <span>{provider.icon}</span> {provider.name}
+                        {hasApiKeyForProvider(provider.id) && <Check className="w-2.5 h-2.5 text-green-400" />}
                       </label>
                       <div className="relative">
                         <input
@@ -343,114 +221,51 @@ export function Sidebar({
                           placeholder={`Enter ${provider.name} API key...`}
                           className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg pr-8 pl-3 py-2 text-xs text-neutral-300 placeholder:text-neutral-700 focus:outline-none focus:border-[#e91e63]/30 transition-colors font-mono"
                         />
-                        <button
-                          onClick={() => toggleShowKey(provider.id)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-neutral-600 hover:text-neutral-400 transition-colors"
-                        >
-                          {showKeys[provider.id] ? (
-                            <EyeOff className="w-3 h-3" />
-                          ) : (
-                            <Eye className="w-3 h-3" />
-                          )}
+                        <button onClick={() => toggleShowKey(provider.id)} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-neutral-600 hover:text-neutral-400 transition-colors">
+                          {showKeys[provider.id] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                         </button>
                       </div>
                     </div>
                   ))}
-                  <Button
-                    onClick={handleSaveApiKeys}
-                    className={`w-full text-sm font-medium transition-all ${
-                      keysSaved
-                        ? "bg-green-500/20 border border-green-500/30 text-green-400"
-                        : "bg-[#e91e63]/10 hover:bg-[#e91e63]/20 border border-[#e91e63]/20 text-[#e91e63] hover:text-[#ff2a76]"
-                    }`}
-                  >
-                    {keysSaved ? (
-                      <>
-                        <Check className="w-4 h-4 mr-1" /> Saved!
-                      </>
-                    ) : (
-                      "Save API Keys"
-                    )}
+                  <Button onClick={handleSaveApiKeys} className={`w-full text-sm font-medium transition-all ${keysSaved ? "bg-green-500/20 border border-green-500/30 text-green-400" : "bg-[#e91e63]/10 hover:bg-[#e91e63]/20 border border-[#e91e63]/20 text-[#e91e63] hover:text-[#ff2a76]"}`}>
+                    {keysSaved ? <><Check className="w-4 h-4 mr-1" /> Saved!</> : "Save API Keys"}
                   </Button>
                 </div>
               )}
 
-              {/* Settings toggle */}
-              <button
-                onClick={() => { setShowSettings(!showSettings); setShowApiKeys(false); }}
-                className="w-full flex items-center gap-2 px-4 py-3 text-xs text-neutral-500 hover:text-white hover:bg-white/[0.03] transition-all border-t border-white/[0.06]"
-              >
-                <Settings className="w-3.5 h-3.5" />
-                Settings
-                <ChevronDown
-                  className={`w-3 h-3 ml-auto transition-transform ${
-                    showSettings ? "rotate-180" : ""
-                  }`}
-                />
+              <button onClick={() => { setShowSettings(!showSettings); setShowApiKeys(false); }} className="w-full flex items-center gap-2 px-4 py-3 text-xs text-neutral-500 hover:text-white hover:bg-white/[0.03] transition-all border-t border-white/[0.06]">
+                <Settings className="w-3.5 h-3.5" /> Settings
+                <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${showSettings ? "rotate-180" : ""}`} />
               </button>
 
-              {/* Settings panel */}
               {showSettings && (
                 <div className="px-4 pb-4 space-y-4 border-t border-white/[0.06] pt-3 animate-fade-in max-h-96 overflow-y-auto">
-                  {/* Model selector organized by provider */}
                   <div>
-                    <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-widest mb-2 block">
-                      Model
-                    </label>
+                    <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-widest mb-2 block">Model</label>
                     <div className="space-y-2">
                       {PROVIDERS.map((provider) => {
                         const models = getModelsByProvider(provider.id);
                         if (models.length === 0) return null;
                         const isExpanded = expandedProviders.includes(provider.id);
                         const hasKey = provider.free || hasApiKeyForProvider(provider.id);
-
                         return (
                           <div key={provider.id}>
-                            <button
-                              onClick={() => toggleProvider(provider.id)}
-                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/[0.03] transition-colors text-left"
-                            >
-                              {isExpanded ? (
-                                <ChevronDown className="w-3 h-3 text-neutral-600" />
-                              ) : (
-                                <ChevronRight className="w-3 h-3 text-neutral-600" />
-                              )}
-                              <span className="text-[10px]" style={{ color: provider.color }}>
-                                {provider.icon}
-                              </span>
-                              <span className="text-[11px] font-medium text-neutral-400">
-                                {provider.name}
-                              </span>
+                            <button onClick={() => toggleProvider(provider.id)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/[0.03] transition-colors text-left">
+                              {isExpanded ? <ChevronDown className="w-3 h-3 text-neutral-600" /> : <ChevronRight className="w-3 h-3 text-neutral-600" />}
+                              <span className="text-[10px]" style={{ color: provider.color }}>{provider.icon}</span>
+                              <span className="text-[11px] font-medium text-neutral-400">{provider.name}</span>
                               <span className="ml-auto">
-                                {provider.free ? (
-                                  <span className="text-[9px] text-green-400">FREE</span>
-                                ) : hasKey ? (
-                                  <Check className="w-3 h-3 text-green-400" />
-                                ) : (
-                                  <AlertCircle className="w-3 h-3 text-yellow-500" />
-                                )}
+                                {provider.free ? <span className="text-[9px] text-green-400">FREE</span> : hasKey ? <Check className="w-3 h-3 text-green-400" /> : <AlertCircle className="w-3 h-3 text-yellow-500" />}
                               </span>
                             </button>
                             {isExpanded && (
                               <div className="ml-3 space-y-1 mt-1">
                                 {models.map((m) => (
-                                  <button
-                                    key={m.id}
-                                    onClick={() => onModelChange(m.id)}
-                                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all ${
-                                      currentModel === m.id
-                                        ? "bg-[#e91e63]/10 border border-[#e91e63]/20"
-                                        : "hover:bg-white/[0.04] border border-transparent"
-                                    }`}
-                                  >
-                                    <Zap className={`w-3.5 h-3.5 ${currentModel === m.id ? 'text-[#e91e63]' : 'text-neutral-600'}`} />
+                                  <button key={m.id} onClick={() => onModelChange(m.id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all ${currentModel === m.id ? "bg-[#e91e63]/10 border border-[#e91e63]/20" : "hover:bg-white/[0.04] border border-transparent"}`}>
+                                    <Zap className={`w-3.5 h-3.5 ${currentModel === m.id ? "text-[#e91e63]" : "text-neutral-600"}`} />
                                     <div>
-                                      <div className={`text-xs font-medium ${currentModel === m.id ? 'text-white' : 'text-neutral-300'}`}>
-                                        {m.name}
-                                      </div>
-                                      <div className="text-[10px] text-neutral-600">
-                                        {m.description}
-                                      </div>
+                                      <div className={`text-xs font-medium ${currentModel === m.id ? "text-white" : "text-neutral-300"}`}>{m.name}</div>
+                                      <div className="text-[10px] text-neutral-600">{m.description}</div>
                                     </div>
                                   </button>
                                 ))}
@@ -462,26 +277,11 @@ export function Sidebar({
                     </div>
                   </div>
 
-                  {/* Speech mode */}
                   <div>
-                    <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-widest mb-2 block">
-                      Speech Mode
-                    </label>
+                    <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-widest mb-2 block">Speech Mode</label>
                     <div className="flex gap-1.5">
-                      {[
-                        { id: "normal", label: "Normal", icon: "💬" },
-                        { id: "caveman", label: "Caveman", icon: "🦣" },
-                        { id: "rocky", label: "Rocky", icon: "🪨" },
-                      ].map((mode) => (
-                        <button
-                          key={mode.id}
-                          onClick={() => onSpeechModeChange(mode.id)}
-                          className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-lg text-xs transition-all ${
-                            speechMode === mode.id
-                              ? "bg-[#e91e63]/10 border border-[#e91e63]/20 text-white"
-                              : "hover:bg-white/[0.04] border border-transparent text-neutral-500"
-                          }`}
-                        >
+                      {[{ id: "normal", label: "Normal", icon: "💬" }, { id: "caveman", label: "Caveman", icon: "🦣" }, { id: "rocky", label: "Rocky", icon: "🪨" }].map((mode) => (
+                        <button key={mode.id} onClick={() => onSpeechModeChange(mode.id)} className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-lg text-xs transition-all ${speechMode === mode.id ? "bg-[#e91e63]/10 border border-[#e91e63]/20 text-white" : "hover:bg-white/[0.04] border border-transparent text-neutral-500"}`}>
                           <span className="text-sm">{mode.icon}</span>
                           <span className="text-[10px]">{mode.label}</span>
                         </button>
@@ -489,31 +289,16 @@ export function Sidebar({
                     </div>
                   </div>
 
-                  {/* Thinking toggle */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Brain className="w-3.5 h-3.5 text-neutral-600" />
-                      <span className="text-xs text-neutral-400">
-                        Extended Thinking
-                      </span>
+                      <span className="text-xs text-neutral-400">Extended Thinking</span>
                     </div>
-                    <button
-                      onClick={onThinkingToggle}
-                      className={`w-9 h-5 rounded-full transition-all ${
-                        thinkingEnabled
-                          ? "bg-[#e91e63]"
-                          : "bg-white/[0.08]"
-                      }`}
-                    >
-                      <div
-                        className={`w-3.5 h-3.5 rounded-full bg-white transition-all mt-[3px] ${
-                          thinkingEnabled ? "ml-[19px]" : "ml-[3px]"
-                        }`}
-                      />
+                    <button onClick={onThinkingToggle} className={`w-9 h-5 rounded-full transition-all ${thinkingEnabled ? "bg-[#e91e63]" : "bg-white/[0.08]"}`}>
+                      <div className={`w-3.5 h-3.5 rounded-full bg-white transition-all mt-[3px] ${thinkingEnabled ? "ml-[19px]" : "ml-[3px]"}`} />
                     </button>
                   </div>
 
-                  {/* Token estimate */}
                   <div className="flex items-center justify-between text-[10px] text-neutral-600">
                     <div className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
