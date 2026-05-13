@@ -1,52 +1,40 @@
-export type Mode = "chat" | "codigo" | "imagen";
-
-export interface Message {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: number;
-  isImage?: boolean;
-  imageData?: string;
+export interface Domain {
+  id: string
+  domain: string
 }
 
-export interface Session {
-  id: string;
-  title: string;
-  messages: Message[];
-  createdAt: number;
-  updatedAt: number;
-  mode: Mode;
-  model: string;
+export interface MailAccount {
+  id: string
+  address: string
+  password: string
+  token: string
+  createdAt: string
 }
 
-export interface ModelOption {
-  id: string;
-  name: string;
-  description: string;
-  mode?: Mode[];
+export interface Attachment {
+  id: string
+  filename: string
+  contentType: string
+  size: number
+  downloadUrl: string
 }
 
-export interface Settings {
-  defaultModel: string;
-  defaultMode: Mode;
-  extendedThinking: boolean;
-  codeReview: boolean;
-  planningMode: boolean;
+export interface MailMessage {
+  id: string
+  from: { address: string; name: string }
+  to: { address: string; name: string }[]
+  subject: string
+  intro: string
+  text?: string
+  html?: string[]
+  attachments: Attachment[]
+  size: number
+  createdAt: string
+  updatedAt: string
+  seen: boolean
 }
 
-export interface ChatRequestBody {
-  messages: { role: string; content: string }[];
-  model: string;
-  mode: Mode;
-  systemSuffix?: string;
-}
-
-export interface ImageRequestBody {
-  prompt: string;
-  size?: string;
-}
-
-export interface ImageGenerationResponse {
-  imageData: string;
-  error?: string;
+export interface MessagesResponse {
+  'hydra:member': MailMessage[]
+  'hydra:totalItems': number
 }
